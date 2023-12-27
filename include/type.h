@@ -122,4 +122,13 @@ struct psinfo {		/* information for the ps(1) program */
 	vir_bytes proc, mproc, fproc;	/* addresses of the main process tables. */
 };
 
+typedef struct {
+	int argc;
+	int envc;
+	char** argv;
+	char** envp;
+	int stop;
+	int exit_status;
+} emulator_env;
+
 #endif /* _TYPE_H */

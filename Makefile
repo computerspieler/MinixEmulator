@@ -4,8 +4,8 @@ OBJS=$(patsubst %,bin/objs/%.o,$(SRCS))
 
 CC=gcc
 LD=gcc
-CCFLAGS=-Wall -Wextra -g -ggdb -Isrc -Iinclude -Ilibx86emu/include -c \
-	-Wno-incompatible-pointer-types
+CCFLAGS=-Wall -Wextra -g -ggdb -Iinclude -Ilibx86emu/include -c \
+	-Wno-incompatible-pointer-types -Wno-unused-parameter
 LDFLAGS=-g -ggdb
 
 all: bin/emulator

@@ -16,6 +16,20 @@ void die()
 	return -1; 					\
 }
 
+emulator_env parse_arguments(int argc, char* argv[])
+{
+	emulator_env output;
+
+	output.envc = 0;
+	output.envp = NULL;
+	output.argc = argc-1;	
+	output.argv = &argv[1];
+	output.stop = 0;
+	output.exit_status = 0;
+
+	return output;
+}
+
 int main(int argc, char* argv[])
 {
 	FILE *fp;
@@ -54,7 +68,7 @@ int main(int argc, char* argv[])
 	switch(header.a_cpu) {
 	case A_I80386:
 		printf("CPU ID: I386\n");
-		return run_x86_emulator(argc-1, &argv[1], fp, header);
+		return run_x86_emulator(parse_arguments(argc, argv), fp, header);
 	case A_I8086:
 		printf("Targeted CPU: I86\n");
 		ERROR("Unsupported CPU");

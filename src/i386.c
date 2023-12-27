@@ -2,11 +2,13 @@
 #include <string.h>
 
 #include "x86emu.h"
-#include "x86emu_int.h"
+#include "services.h"
 #include "i386.h"
 #include "type.h"
 
-void flush_log(x86emu_t*, char *buf, unsigned size)
+static emulator_env x86_program_env;
+
+void flush_log(x86emu_t* emu, char *buf, unsigned size)
 {
 	if(!buf || !size) return;
 
@@ -35,8 +37,14 @@ int intr_handler(x86emu_t *emu, u8 num, unsigned type)
 		((uint8_t*)&mess)[i] =
 			(uint8_t) x86emu_read_byte(emu, emu->x86.R_DS_BASE + emu->x86.R_EBX + i);
 
-	printf("source: %8x, type: %d\n", mess.m_source, mess.m_type);
-	return 1;
+	if(interpret_message(&x86_program_env, emu->x86.R_EAX, &mess))
+		emu->x86.R_EAX = -1;
+	else {
+		emu->x86.R_EAX = 0;
+		
+		if(x86_program_env.stop)
+			x86emu_stop(emu);
+	}
 }
 
 #define PAGE_SIZE	4096
@@ -76,32 +84,63 @@ void put_content_in_memory(x86emu_t *emu,
 	clear_memory(emu, addr, 0, page_align, page_flags);
 }
 
-void push_arguments(x86emu_t *emu,
-	unsigned *addr,
-	int argc, char* argv[], int page_align, int page_flags)
+void push_environnement(x86emu_t *emu,
+	unsigned *addr, emulator_env program_env,
+	int page_align, int page_flags)
 {
 	int i, j;
-	size_t arg_start;
-	int args_length[argc];
+	size_t start_off;
+	int args_length[program_env.argc];
+	int env_length[program_env.envc];
 	
-	for(i = 0; i < argc; i ++)
-		args_length[i] = 1+strlen(argv[i]);
+	for(i = 0; i < program_env.argc; i ++)
+		args_length[i] = 1+strlen(program_env.argv[i]);
 
-	x86emu_set_perm(emu, *addr, *addr + 4 + 4*argc, page_flags);
-	x86emu_write_dword(emu, *addr, argc);
+	for(i = 0; i < program_env.envc; i ++)
+		env_length[i] = 1+strlen(program_env.envp[i]);
+
+	x86emu_set_perm(emu, *addr, *addr + 4, page_flags);
+	x86emu_write_dword(emu, *addr, program_env.argc);
 	*addr+=4;
 
-	arg_start = 0;
-	for(i = 0; i < argc; i ++) {
-		x86emu_write_dword(emu, *addr + 4*i, *addr + 4*argc + arg_start);
-		arg_start += args_length[i];
+	start_off = 0;
+	for(i = 0; i < program_env.argc; i ++) {
+		x86emu_set_perm(emu, *addr + 4*i, *addr + 4*(i+1), page_flags);
+		x86emu_write_dword(emu, *addr + 4*i,
+			*addr + 4*(program_env.argc + program_env.envc + 1) + start_off);
+		start_off += args_length[i];
 	}
-	*addr += 4*argc;
 
-	for(i = 0; i < argc; i ++) {
-		x86emu_set_perm(emu, *addr, *addr + args_length[i], page_flags);
+	for(i = 0; i < program_env.envc; i ++) {
+		x86emu_set_perm(emu,
+			*addr + 4*(i + program_env.argc),
+			*addr + 4*(i + program_env.argc + 1),
+			page_flags);
+
+		x86emu_write_dword(emu,
+			*addr + 4*(i + program_env.argc),
+			*addr + 4*(program_env.argc + program_env.envc + 1) + start_off);
+		start_off += env_length[i];
+	}
+	x86emu_set_perm(emu,
+		*addr + 4*(program_env.envc + program_env.argc),
+		*addr + 4*(program_env.envc + program_env.argc + 1),
+		page_flags);
+	x86emu_write_dword(emu, *addr + 4*(program_env.envc + program_env.argc), 0);
+	*addr += 4*(program_env.envc + program_env.argc + 1);
+
+	for(i = 0; i < program_env.argc; i ++) {
 		for(j = 0; j < args_length[i]; j ++) {
-			x86emu_write_byte_noperm(emu, *addr, argv[i][j]);
+			x86emu_set_perm(emu, *addr, *addr + 1, page_flags);
+			x86emu_write_byte_noperm(emu, *addr, program_env.argv[i][j]);
+			(*addr) ++;
+		}
+	}
+
+	for(i = 0; i < program_env.envc; i ++) {
+		for(j = 0; j < env_length[i]; j ++) {
+			x86emu_set_perm(emu, *addr, *addr + 1, page_flags);
+			x86emu_write_byte_noperm(emu, *addr, program_env.envp[i][j]);
 			(*addr) ++;
 		}
 	}
@@ -109,11 +148,13 @@ void push_arguments(x86emu_t *emu,
 	clear_memory(emu, addr, 0, page_align, page_flags);
 }
 
-int run_x86_emulator(int argc, char* argv[], FILE *fp, struct exec header)
+int run_x86_emulator(emulator_env program_env, FILE *fp, struct exec header)
 {
 	size_t stack_size;
 	unsigned int text_addr, data_addr, stack_addr, addr;
 	x86emu_t *emu;
+
+	x86_program_env = program_env;
 
 	fseek(fp, header.a_hdrlen, SEEK_SET);
 
@@ -143,12 +184,12 @@ int run_x86_emulator(int argc, char* argv[], FILE *fp, struct exec header)
 	clear_memory(emu, &addr, header.a_bss, 1, X86EMU_PERM_RW | X86EMU_PERM_VALID);
 
 	// The stack
-	stack_addr = 0xF0000000;
+	stack_addr = 0xE0000000;
 	stack_size = header.a_total - (header.a_text + header.a_data + header.a_bss);
 	addr = stack_addr;
 	clear_memory(emu, &addr, stack_size, 0, X86EMU_PERM_RW | X86EMU_PERM_VALID);
 
-	push_arguments(emu, &addr, argc, argv, 1, X86EMU_PERM_RW | X86EMU_PERM_VALID);
+	push_environnement(emu, &addr, program_env, 1, X86EMU_PERM_RW | X86EMU_PERM_VALID);
 	
 	emu->x86.R_EBP =
 	emu->x86.R_ESP = stack_size + stack_addr - data_addr;
@@ -184,7 +225,7 @@ int run_x86_emulator(int argc, char* argv[], FILE *fp, struct exec header)
 
 	printf("Text length: %8x; Data length: %8x; BSS length: %8x; Stack length: %8lx",
 		header.a_text, header.a_data, header.a_bss, stack_size);
-	//emu->log.trace = X86EMU_TRACE_CODE | X86EMU_TRACE_REGS | X86EMU_TRACE_DATA;
+	emu->log.trace = X86EMU_TRACE_CODE | X86EMU_TRACE_REGS | X86EMU_TRACE_DATA;
 	x86emu_run(emu, X86EMU_RUN_LOOP | X86EMU_RUN_NO_CODE | X86EMU_RUN_NO_EXEC);
 	x86emu_dump(emu, X86EMU_DUMP_DEFAULT);
 	x86emu_clear_log(emu, 1);
@@ -192,5 +233,5 @@ int run_x86_emulator(int argc, char* argv[], FILE *fp, struct exec header)
 	printf("Done !\n");
 	x86emu_done(emu);
 
-	return 0;
+	return x86_program_env.exit_status;
 }
