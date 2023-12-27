@@ -1,0 +1,3 @@
+[submodule "libx86emu"]
+	path = libx86emu
+	url = git@github.com:computerspieler/libx86emu.git
