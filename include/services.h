@@ -3,6 +3,6 @@
 
 #include "type.h"
 
-int interpret_message(emulator_env *env, uint32_t dest_src, message *mess);
+int interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, int direction);
 
 #endif

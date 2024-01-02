@@ -4,19 +4,17 @@
 #include <stdint.h>
 
 /* Type definitions. */
-typedef unsigned int vir_clicks; /* virtual  addresses and lengths in clicks */
+typedef int32_t cpu_int;
+typedef uint32_t cpu_ptr;
+
+typedef uint32_t vir_clicks; /* virtual  addresses and lengths in clicks */
 typedef uint32_t phys_bytes; /* physical addresses and lengths in bytes */
-typedef unsigned int phys_clicks;/* physical addresses and lengths in clicks */
+typedef uint32_t phys_clicks;/* physical addresses and lengths in clicks */
 
 //typedef void (*sighandler_t)(int);
 //TODO: Verify sighandler_t definition
-#ifdef _I86_H_
-typedef uint16_t vir_bytes;	/* virtual addresses and lengths in bytes */
-typedef uint16_t sighandler_t;
-#else
-typedef uint32_t vir_bytes;	/* virtual addresses and lengths in bytes */
-typedef uint32_t sighandler_t;
-#endif
+typedef cpu_ptr vir_bytes;	/* virtual addresses and lengths in bytes */
+typedef cpu_ptr sighandler_t;
 
 /* Types relating to messages. */
 #define M1                 1
@@ -24,14 +22,16 @@ typedef uint32_t sighandler_t;
 #define M4                 4
 #define M3_STRING         14
 
-typedef struct {int m1i1, m1i2, m1i3; char *m1p1, *m1p2, *m1p3;} mess_1;
-typedef struct {int m2i1, m2i2, m2i3; long m2l1, m2l2; char *m2p1;} mess_2;
-typedef struct {int m3i1, m3i2; char *m3p1; char m3ca1[M3_STRING];} mess_3;
-typedef struct {long m4l1, m4l2, m4l3, m4l4, m4l5;} mess_4;
-typedef struct {char m5c1, m5c2; int m5i1, m5i2; long m5l1, m5l2, m5l3;}mess_5;
-typedef struct {int m6i1, m6i2, m6i3; long m6l1; sighandler_t m6f1;} mess_6;
 
-typedef struct {
+typedef struct {cpu_int m1i1, m1i2, m1i3; cpu_ptr m1p1, m1p2, m1p3;} mess_1;
+typedef struct {cpu_int m2i1, m2i2, m2i3; int32_t m2l1, m2l2; cpu_ptr m2p1;} mess_2;
+typedef struct {cpu_int m3i1, m3i2; cpu_ptr m3p1; int8_t m3ca1[M3_STRING];} mess_3;
+typedef struct {int32_t m4l1, m4l2, m4l3, m4l4, m4l5;} mess_4;
+typedef struct {int8_t m5c1, m5c2; cpu_int m5i1, m5i2; int32_t m5l1, m5l2, m5l3;}mess_5;
+typedef struct {cpu_int m6i1, m6i2, m6i3; int32_t m6l1; sighandler_t m6f1;} mess_6;
+
+typedef struct message message;
+struct message {
   int32_t m_source;			/* who sent the message */
   int32_t m_type;			/* what kind of message is it */
   union {
@@ -42,7 +42,7 @@ typedef struct {
 	mess_5 m_m5;
 	mess_6 m_m6;
   } m_u;
-} message;
+};
 
 /* The following defines provide names for useful members. */
 #define m1_i1  m_u.m_m1.m1i1
@@ -108,7 +108,7 @@ typedef struct {
  */
 struct sigmsg {
 	int sm_signo;			/* signal number being caught */
-	unsigned long sm_mask;	/* mask to restore when handler returns */
+	uint32_t sm_mask;	/* mask to restore when handler returns */
 	vir_bytes sm_sighandler;	/* address of handler */
 	vir_bytes sm_sigreturn;	/* address of _sigreturn in C library */
 	vir_bytes sm_stkptr;		/* user stack pointer */
@@ -122,13 +122,36 @@ struct psinfo {		/* information for the ps(1) program */
 	vir_bytes proc, mproc, fproc;	/* addresses of the main process tables. */
 };
 
-typedef struct {
+#include "array.h"
+#include "exec_format.h"
+
+typedef struct Emulator_Env Emulator_Env;
+struct Emulator_Env {
 	int argc;
 	int envc;
 	char** argv;
 	char** envp;
 	int stop;
 	int exit_status;
-} emulator_env;
+
+	Array file_handlers;
+
+	message response;
+	struct exec hdr;
+
+	void *text;
+	void *data;
+	void *bss;
+	Array stack;
+	Array heap;
+
+	uint32_t text_start;
+	uint32_t data_start;
+	uint32_t bss_start;
+	uint32_t stack_ptr_start;
+	uint32_t heap_start;
+
+	int (*read_byte)(Emulator_Env*, uint32_t);
+};
 
 #endif /* _TYPE_H */

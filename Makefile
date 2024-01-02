@@ -4,11 +4,19 @@ OBJS=$(patsubst %,bin/objs/%.o,$(SRCS))
 
 CC=gcc
 LD=gcc
-CCFLAGS=-Wall -Wextra -g -ggdb -Iinclude -Ilibx86emu/include -c \
+CCFLAGS=-Wall -Wextra -Iinclude -Ilibx86emu/include -c \
 	-Wno-incompatible-pointer-types -Wno-unused-parameter
-LDFLAGS=-g -ggdb
+LDFLAGS=
 
-all: bin/emulator
+all: debug
+
+release: LDFLAGS:=-O2
+release: CCFLAGS:=$(CCFLAGS) -O2
+release: bin/emulator
+
+debug: LDFLAGS:=-g -ggdb -fsanitize=address
+debug: CCFLAGS:=$(CCFLAGS) -g -ggdb -DDEBUG
+debug: bin/emulator
 
 clean:
 	rm -rf bin
