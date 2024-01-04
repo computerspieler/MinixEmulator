@@ -25,11 +25,10 @@ void array_free(Array* s)
 	s->physical_size = 0;
 	s->element_size = 0;
 
-	if(!s->array)
-		return;
-
-	free(s->array);
-	s->array = NULL;
+	if(s->array) {
+		free(s->array);
+		s->array = NULL;
+	}
 }
 
 void array_set(Array* s, unsigned int index, void* elt_ptr)
@@ -45,6 +44,9 @@ void array_set(Array* s, unsigned int index, void* elt_ptr)
 
 void array_push(Array* s, void* elt_ptr)
 {
+	if(s->physical_size == 0)
+		return;
+
 	if(s->logical_size >= s->physical_size)
 	{
 		s->physical_size = 2*s->logical_size;
@@ -68,7 +70,7 @@ size_t array_size(Array* s)
 
 void array_set_size(Array* s, size_t new_len)
 {
-	while(new_len >= s->physical_size)
+	while(new_len > s->physical_size)
 		array_push(s, NULL);
 
 	s->logical_size = new_len;

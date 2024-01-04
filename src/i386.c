@@ -39,8 +39,14 @@ int intr_handler(x86emu_t *emu, u8 num, unsigned type)
 				emu,
 				message_ptr + i
 			);
-		x86emu_log(emu, "r[%8lx]: %2x\n", message_ptr+i, ((uint8_t*)&mess)[i]);
+		
+		if(i % 8 == 0)
+			DEBUG_LOG("%08lx: ", message_ptr + i);
+		DEBUG_LOG("%02x ", ((uint8_t*)&mess)[i]);
+		if(i % 8 == 7 || i == sizeof(message) - 1)
+			DEBUG_LOG("\n");
 	}
+	DEBUG_LOG("Pointer: %8x\n", message_ptr);
 
 	emu->x86.R_EAX = interpret_message(env, emu->x86.R_EAX, &mess, direction);
 	if(emu->x86.R_EAX)
@@ -57,38 +63,40 @@ int intr_handler(x86emu_t *emu, u8 num, unsigned type)
 				message_ptr + i,
 				((uint8_t*)&(env->response))[i] & 0xFF
 			);
-			x86emu_log(emu, "w[%8lx]: %2x\n", message_ptr+i, ((uint8_t*)&mess)[i]);
+			//DEBUG_LOG("w[%8lx]: %2x\n", message_ptr+i, ((uint8_t*)&mess)[i]);
 		}
 	}
 
 	return 1;
 }
 
-int get_permission_and_value_to_modify(Emulator_Env *env, u32 addr, void **value_to_modify, unsigned int type)
+int get_permission_and_value_to_modify(Emulator_Env *env, u32 addr, uint8_t **value_to_modify, unsigned int type)
 {
 	size_t stack_size;
 	size_t heap_size;
 
 	int permissions;
-	permissions = 0;
 
+	permissions = 0;
 	*value_to_modify = NULL;
-	if(addr >= env->text_start && addr <= env->text_start + env->hdr.a_text) {
-		*value_to_modify = env->text + addr - env->text_start;
+	stack_size = array_size(&env->stack) - 1;
+	heap_size = array_size(&env->heap);
+	
+	if(addr >= env->text_start && addr < env->text_start + env->hdr.a_text) {
+		*value_to_modify = env->text + (addr - env->text_start);
 		permissions |= X86EMU_PERM_X;
 	}
 
-	if(addr >= env->data_start && addr <= env->data_start + env->hdr.a_data) {
-		*value_to_modify = env->data + addr - env->data_start;
+	if(addr >= env->data_start && addr < env->data_start + env->hdr.a_data) {
+		*value_to_modify = env->data + (addr - env->data_start);
 		permissions |= X86EMU_PERM_R | X86EMU_PERM_W;
 	}
 
-	if(addr >= env->bss_start && addr <= env->bss_start + env->hdr.a_bss) {
-		*value_to_modify = env->bss + addr - env->bss_start;
+	if(addr >= env->bss_start && addr < env->bss_start + env->hdr.a_bss) {
+		*value_to_modify = env->bss + (addr - env->bss_start);
 		permissions |= X86EMU_PERM_R | X86EMU_PERM_W;
 	}
 
-	stack_size = array_size(&env->stack) - 1;
 	// If we're "pushing" a value
 	if(addr >= (uint32_t)(~0 - stack_size - 4)
 		&& addr < (uint32_t)(~0 - stack_size)
@@ -101,13 +109,12 @@ int get_permission_and_value_to_modify(Emulator_Env *env, u32 addr, void **value
 		stack_size += 4;
 	}
 
-	if(addr >= (uint32_t)(~0 - stack_size))  {
-		*value_to_modify = env->stack.array + (~0 - addr);
+	if(addr > (uint32_t)(~0 - stack_size))  {
+		*value_to_modify = env->stack.array + stack_size - (~0 - addr + 1);
 		permissions |= X86EMU_PERM_R | X86EMU_PERM_W;
 	}
 
-	heap_size = array_size(&env->heap);
-	if(addr >= env->heap_start && addr < env->heap_start - heap_size)  {
+	if(addr >= env->heap_start && addr < env->heap_start + heap_size)  {
 		*value_to_modify = env->heap.array + (addr - env->heap_start);
 		permissions |= X86EMU_PERM_R | X86EMU_PERM_W;
 	}
@@ -120,10 +127,9 @@ int read_byte(Emulator_Env* env, uint32_t addr)
 	uint8_t *val;
 	
 	addr += env->data_start;
-	get_permission_and_value_to_modify(env, addr, &val, 0);
-	if(val)
-		return *val;
-	return 0;
+	get_permission_and_value_to_modify(env, addr, &val, X86EMU_PERM_R);
+
+	return val ? *val : 0;
 }
 
 unsigned int memio_handler(x86emu_t *emu, u32 addr, u32 *val, unsigned type)
@@ -146,6 +152,10 @@ unsigned int memio_handler(x86emu_t *emu, u32 addr, u32 *val, unsigned type)
 
 	switch(bits) {
 	case X86EMU_MEMIO_8_NOPERM:
+		other_perm = get_permission_and_value_to_modify(
+			env, addr, &value_to_modify, type);
+		goto skip_permissions_check;
+	
 	case X86EMU_MEMIO_8:
 		other_perm = get_permission_and_value_to_modify(
 			env, addr, &value_to_modify, type);
@@ -175,35 +185,34 @@ unsigned int memio_handler(x86emu_t *emu, u32 addr, u32 *val, unsigned type)
 		return 1;
 	}
 
-	if(bits != X86EMU_MEMIO_8_NOPERM) {
-		// Check permissions
-		if(
-			!((permissions & X86EMU_PERM_X) && (type == X86EMU_MEMIO_X)) &&
-			!((permissions & X86EMU_PERM_R) && (type == X86EMU_MEMIO_R)) &&
-			!((permissions & X86EMU_PERM_W) && (type == X86EMU_MEMIO_W))
-		) {
-			*val = -1;
-			return 1;
-		}
+	// Check permissions
+	if(
+		!((permissions & X86EMU_PERM_X) && (type == X86EMU_MEMIO_X)) &&
+		!((permissions & X86EMU_PERM_R) && (type == X86EMU_MEMIO_R)) &&
+		!((permissions & X86EMU_PERM_W) && (type == X86EMU_MEMIO_W))
+	) {
+		*val = -1;
+		return 1;
 	}
 
+skip_permissions_check:
 	switch(type) {
 	case X86EMU_MEMIO_X:
 	case X86EMU_MEMIO_R:
 		switch(bits) {
 		case X86EMU_MEMIO_8:
 		case X86EMU_MEMIO_8_NOPERM:
-			*val = *value_to_modify;
+			*val = value_to_modify[0];
 			break;
 		case X86EMU_MEMIO_16:
-			*val = *value_to_modify;
-			*val |= *(value_to_modify+1) << 8;
+			*val  = value_to_modify[0];
+			*val |= value_to_modify[1] << 8;
 			break;
 		case X86EMU_MEMIO_32:
-			*val = *value_to_modify;
-			*val |= *(value_to_modify+1) << 8;
-			*val |= *(value_to_modify+2) << 16;
-			*val |= *(value_to_modify+3) << 24;
+			*val  = value_to_modify[0];
+			*val |= value_to_modify[1] << 8;
+			*val |= value_to_modify[2] << 16;
+			*val |= value_to_modify[3] << 24;
 			break;
 		}
 		break;
@@ -211,17 +220,17 @@ unsigned int memio_handler(x86emu_t *emu, u32 addr, u32 *val, unsigned type)
 		switch(bits) {
 		case X86EMU_MEMIO_8:
 		case X86EMU_MEMIO_8_NOPERM:
-			*value_to_modify = (*val) & 0xFF;
+			value_to_modify[0] = (*val) & 0xFF;
 			break;
 		case X86EMU_MEMIO_16:
-			*value_to_modify = (*val) & 0xFF;
-			*(value_to_modify+1) = ((*val) >> 8) & 0xFF;
+			value_to_modify[0] = (*val) & 0xFF;
+			value_to_modify[1] = ((*val) >> 8) & 0xFF;
 			break;
 		case X86EMU_MEMIO_32:
-			*value_to_modify = (*val) & 0xFF;
-			*(value_to_modify+1) = ((*val) >>  8) & 0xFF;
-			*(value_to_modify+2) = ((*val) >> 16) & 0xFF;
-			*(value_to_modify+3) = ((*val) >> 24) & 0xFF;
+			value_to_modify[0] = (*val) & 0xFF;
+			value_to_modify[1] = ((*val) >>  8) & 0xFF;
+			value_to_modify[2] = ((*val) >> 16) & 0xFF;
+			value_to_modify[3] = ((*val) >> 24) & 0xFF;
 			break;
 		}
 		break;
@@ -245,11 +254,11 @@ int run_x86_emulator(Emulator_Env *env)
 
 	env->read_byte = read_byte;
 
-	env->text_start = 0;
+	env->text_start = 0x0;
 	if(TEXT_DATA_SEPERARED(env))
-		env->data_start = env->text_start;
-	else
 		env->data_start = 0x80000000;
+	else
+		env->data_start = env->text_start;
 	env->bss_start = env->data_start + env->hdr.a_data;
 	env->heap_start = env->bss_start + env->hdr.a_bss;
 
@@ -262,6 +271,13 @@ int run_x86_emulator(Emulator_Env *env)
 	// Set the CPU to 32 bits
 	emu->x86.R_CR0 |= 1;
 	/* set default data/address size to 32 bit */
+	emu->x86.R_CS =
+	emu->x86.R_DS =
+	emu->x86.R_ES =
+	emu->x86.R_FS =
+	emu->x86.R_GS =
+	emu->x86.R_SS = 0;
+
 	emu->x86.R_CS_ACC = 0b110011111011;
 	emu->x86.R_DS_ACC =
 	emu->x86.R_ES_ACC =
@@ -287,7 +303,7 @@ int run_x86_emulator(Emulator_Env *env)
 
 	DEBUG_LOG("Text length: %8x; Data length: %8x; BSS length: %8x; Stack length: %8lx\n",
 		env->hdr.a_text, env->hdr.a_data, env->hdr.a_bss, array_size(&env->stack));
-	
+
 	emu->log.trace = X86EMU_TRACE_CODE | X86EMU_TRACE_REGS | X86EMU_TRACE_DATA;
 	x86emu_run(emu, X86EMU_RUN_LOOP | X86EMU_RUN_NO_CODE | X86EMU_RUN_NO_EXEC);
 	x86emu_dump(emu, X86EMU_DUMP_DEFAULT);

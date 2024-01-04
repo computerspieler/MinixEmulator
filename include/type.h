@@ -32,8 +32,8 @@ typedef struct {cpu_int m6i1, m6i2, m6i3; int32_t m6l1; sighandler_t m6f1;} mess
 
 typedef struct message message;
 struct message {
-  int32_t m_source;			/* who sent the message */
-  int32_t m_type;			/* what kind of message is it */
+  cpu_int m_source;			/* who sent the message */
+  cpu_int m_type;			/* what kind of message is it */
   union {
 	mess_1 m_m1;
 	mess_2 m_m2;
@@ -144,6 +144,7 @@ struct Emulator_Env {
 	void *bss;
 	Array stack;
 	Array heap;
+	Array symbols;
 
 	uint32_t text_start;
 	uint32_t data_start;

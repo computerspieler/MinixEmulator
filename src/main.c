@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <strings.h>
 #include <stdlib.h>
 
 #include "exec_format.h"
@@ -14,6 +15,9 @@ void die()
 
 int read_executable(Emulator_Env *env, FILE *fp)
 {
+	unsigned int i;
+	struct nlist symbol;
+
 	if(!fread(&env->hdr, A_MINHDR, 1, fp)) {
 		perror("fread");
 		return -1;
@@ -63,13 +67,44 @@ int read_executable(Emulator_Env *env, FILE *fp)
 	}
 
 	env->bss = malloc(env->hdr.a_bss);
+	bzero(env->bss, env->hdr.a_bss);
+
+	if(A_SYMPOS(env->hdr)) {
+		fseek(fp, A_SYMPOS(env->hdr), SEEK_SET);
+
+		DEBUG_LOG("=== Symbols ===\n");
+		for(i = 0; i < env->hdr.a_syms / sizeof(struct nlist); i ++) {
+			if(!fread(&symbol, sizeof(struct nlist), 1, fp)) {
+				perror("fread");
+				return -1;
+			}
+
+			array_push(&env->symbols, &symbol);
+			DEBUG_LOG("[%s, %s] \"%.*s\" : %08x\n",
+				(
+					((symbol.n_sclass & N_SECT) == N_UNDF) ? "Undf" :
+					((symbol.n_sclass & N_SECT) == N_ABS ) ? "Abs "  :
+					((symbol.n_sclass & N_SECT) == N_TEXT) ? "Code" :
+					((symbol.n_sclass & N_SECT) == N_DATA) ? "Data" :
+					((symbol.n_sclass & N_SECT) == N_BSS ) ? "BSS "  :
+					((symbol.n_sclass & N_SECT) == N_COMM) ? "Comm" :
+					"Unknown"
+				),
+				((symbol.n_sclass & N_CLASS) == C_STAT) ? "static" : "extern",
+				8, symbol.n_name,
+				symbol.n_value
+			);
+		}
+	}
 
 	return 0;
 }
 
 int build_env(Emulator_Env *env, int argc, char* argv[])
 {
-	int i;
+	unsigned int i;
+	size_t stack_size;
+	
 	*env = (Emulator_Env) {0};
 	
 	env->argc = argc-1;	
@@ -77,11 +112,17 @@ int build_env(Emulator_Env *env, int argc, char* argv[])
 	env->file_handlers = array_create(sizeof(FILE*));	
 	env->stack = array_create(sizeof(char));
 	env->heap = array_create(sizeof(char));
+	env->symbols = array_create(sizeof(struct nlist));
 	
-	//TODO: Change 1024
-	for(i = 0; i < 10240; i ++)
-		array_push(&env->stack, NULL);
 	env->stack_ptr_start = 512;
+	stack_size = env->hdr.a_total - (
+		env->hdr.a_bss +
+		env->hdr.a_data +
+		env->hdr.a_text
+	//TODO: Change 8192
+	) + 8192;
+	for(i = 0; i < stack_size + env->stack_ptr_start; i ++)
+		array_push(&env->stack, NULL);
 	
 	return 0;
 }
@@ -91,6 +132,7 @@ void destroy_env(Emulator_Env *env)
 	array_free(&env->file_handlers);
 	array_free(&env->stack);
 	array_free(&env->heap);
+	array_free(&env->symbols);
 	if(env->text)
 		free(env->text);
 	if(env->data)

@@ -89,7 +89,7 @@ struct reloc {
 
 struct nlist {			/* symbol table entry */
 	int8_t		n_name[8];	/* symbol name */
-	uint32_t	n_value;	/* value */
+	int32_t		n_value;	/* value */
 	uint8_t		n_sclass;	/* storage class */
 	uint8_t		n_numaux;	/* number of auxiliary entries (not used) */
 	uint16_t	n_type;		/* language base and derived type (not used) */

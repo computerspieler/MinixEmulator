@@ -9,6 +9,8 @@
 
 int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, int direction)
 {
+	int i;
+
 	FS_DEBUG_LOG("Message type: %d\n", mess->m_type);
 	switch(mess->m_type) {
 	case IOCTL:
@@ -24,16 +26,16 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		return 0;
 	
 	case WRITE:
-		FS_DEBUG_LOG("Line %x; Buffer: %x; Size: %x\n",
-			mess->TTY_LINE, mess->buffer,
+		mess->nbytes &= 0xFFFF;
+		FS_DEBUG_LOG("fd %x; Buffer: %x; Size: %x\n",
+			mess->fd, mess->buffer,
 			mess->nbytes);
 		array_set(&env->file_handlers, 1, stdout);
 		
-		env->response.DEVICE = (mess->TTY_LINE >> MINOR) & 0xFF;
-		assert(env->response.DEVICE == 1);
-		for(int i = 0; i < mess->nbytes; i ++)
-			fputc(env->read_byte(env, mess->buffer), stdout);
-
+		assert(mess->fd == 0 || mess->fd == 1);
+		for(i = 0; i < mess->nbytes; i ++)
+			fputc(env->read_byte(env, mess->buffer+i), stdout);
+		
 		env->response.m_type = 0;
 		env->response.PROC_NR  = mess->m_source;
 		return 0;

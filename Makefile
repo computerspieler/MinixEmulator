@@ -4,11 +4,15 @@ OBJS=$(patsubst %,bin/objs/%.o,$(SRCS))
 
 CC=gcc
 LD=gcc
-CCFLAGS=-Wall -Wextra -Iinclude -Ilibx86emu/include -c \
+CCFLAGS=-Wall -Wextra -I$(PWD)/include -I$(PWD)/libx86emu/include -c \
 	-Wno-incompatible-pointer-types -Wno-unused-parameter
 LDFLAGS=
 
 all: debug
+
+ifneq ($(MAKECMDGOALS), clean)
+-include $(DEPS)
+endif
 
 release: LDFLAGS:=-O2
 release: CCFLAGS:=$(CCFLAGS) -O2
@@ -21,8 +25,6 @@ debug: bin/emulator
 clean:
 	rm -rf bin
 
--include $(DEPS)
-
 bin/emulator: $(OBJS)
 	$(LD) -o $@ $^ $(LDFLAGS)
 
@@ -32,5 +34,5 @@ bin/objs/%.c.o: %.c
 
 bin/deps/%.c.d: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CCFLAGS) -M -o $@ $< -MT $(patsubst bin/deps/%,bin/objs/%,$@)
+	$(CC) $(CCFLAGS) -M -o $@ $< -MT $(patsubst bin/deps/%.d,bin/objs/%.o,$@)
 

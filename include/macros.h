@@ -22,6 +22,6 @@
 
 #define ARRAY_DEFAULT_SIZE	8
 
-#define TEXT_DATA_SEPERARED(env) ((env)->text == (env)->data)
+#define TEXT_DATA_SEPERARED(env) ((env)->text != (env)->data)
 
 #endif
