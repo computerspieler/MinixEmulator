@@ -132,6 +132,17 @@ int read_byte(Emulator_Env* env, uint32_t addr)
 	return val ? *val : 0;
 }
 
+void write_byte(Emulator_Env* env, uint32_t addr, int c)
+{
+	uint8_t *val;
+	
+	addr += env->data_start;
+	get_permission_and_value_to_modify(env, addr, &val, X86EMU_PERM_R);
+
+	if(val)
+		*val = c;
+}
+
 unsigned int memio_handler(x86emu_t *emu, u32 addr, u32 *val, unsigned type)
 {
 	uint8_t *value_to_modify;
@@ -253,6 +264,7 @@ int run_x86_emulator(Emulator_Env *env)
 	x86emu_clear_log(emu, 0);
 
 	env->read_byte = read_byte;
+	env->write_byte = write_byte;
 
 	env->text_start = 0x0;
 	if(TEXT_DATA_SEPERARED(env))

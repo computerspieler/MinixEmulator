@@ -14,7 +14,7 @@
 #define real_grp_id   m1_i2
 #define ls_fd	      m2_i1
 #define mk_mode	      m1_i2
-#define mode	      m3_i2
+#define mode	      m1_i2
 #define c_mode        m1_i3
 #define c_name        m1_p1
 #define name	      m3_p1

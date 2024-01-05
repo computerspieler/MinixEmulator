@@ -153,6 +153,7 @@ struct Emulator_Env {
 	uint32_t heap_start;
 
 	int (*read_byte)(Emulator_Env*, uint32_t);
+	void (*write_byte)(Emulator_Env*, uint32_t, int);
 };
 
 #endif /* _TYPE_H */

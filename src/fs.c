@@ -10,6 +10,7 @@
 int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, int direction)
 {
 	int i;
+	char c;
 
 	FS_DEBUG_LOG("Message type: %d\n", mess->m_type);
 	switch(mess->m_type) {
@@ -32,12 +33,29 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 			mess->nbytes);
 		array_set(&env->file_handlers, 1, stdout);
 		
-		assert(mess->fd == 0 || mess->fd == 1);
-		for(i = 0; i < mess->nbytes; i ++)
-			fputc(env->read_byte(env, mess->buffer+i), stdout);
+		for(i = 0; i < mess->nbytes; i ++) {
+			c = env->read_byte(env, mess->buffer+i);
+			write(mess->fd, &c, 1);
+		}
 		
 		env->response.m_type = 0;
-		env->response.PROC_NR  = mess->m_source;
+		env->response.PROC_NR = mess->m_source;
+		return 0;
+	
+	case READ:
+		mess->nbytes &= 0xFFFF;
+		FS_DEBUG_LOG("fd %x; Buffer: %x; Size: %x\n",
+			mess->fd, mess->buffer,
+			mess->nbytes);
+		array_set(&env->file_handlers, 1, stdout);
+		
+		for(i = 0; i < mess->nbytes; i ++) {
+			read(mess->fd, &c, 1);
+			env->write_byte(env, mess->buffer+i, c);
+		}
+
+		env->response.m_type = 0;
+		env->response.PROC_NR = mess->m_source;
 		return 0;
 
 	default:
