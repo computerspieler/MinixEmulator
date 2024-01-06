@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include <strings.h>
 #include <stdlib.h>
 
@@ -9,7 +10,7 @@
 
 void die()
 {
-    DEBUG_LOG("Usage: emulator [EXECUTABLE]\n");
+    DEBUG_LOG("Usage: emulator [EXECUTABLE] [ARGUMENTS]\n");
 	exit(EXIT_FAILURE);
 }
 
@@ -102,9 +103,6 @@ int read_executable(Emulator_Env *env, FILE *fp)
 
 int build_env(Emulator_Env *env, int argc, char* argv[])
 {
-	unsigned int i;
-	size_t stack_size;
-	
 	*env = (Emulator_Env) {0};
 	
 	env->argc = argc-1;	
@@ -113,16 +111,6 @@ int build_env(Emulator_Env *env, int argc, char* argv[])
 	env->stack = array_create(sizeof(char));
 	env->heap = array_create(sizeof(char));
 	env->symbols = array_create(sizeof(struct nlist));
-	
-	env->stack_ptr_start = 512;
-	stack_size = env->hdr.a_total - (
-		env->hdr.a_bss +
-		env->hdr.a_data +
-		env->hdr.a_text
-	//TODO: Change 8192
-	) + 8192;
-	for(i = 0; i < stack_size + env->stack_ptr_start; i ++)
-		array_push(&env->stack, NULL);
 	
 	return 0;
 }
@@ -147,7 +135,7 @@ int main(int argc, char* argv[])
 	FILE *fp;
 	Emulator_Env env;
 
-	if(argc != 2)
+	if(argc < 2)
 		die();
 
 	if(build_env(&env, argc, argv))
@@ -156,6 +144,7 @@ int main(int argc, char* argv[])
 	fp = fopen(argv[1], "r");
 	if(!fp) {
 		perror("fopen");
+		destroy_env(&env);
 		return -1;
 	}
 

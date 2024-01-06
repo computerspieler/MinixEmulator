@@ -66,7 +66,7 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		return i;
 
 	case TIME:
-		env->response.reply_l1 = (uint32_t) time(NULL);
+		env->response.reply_l1 = (cpu_ptr) time(NULL);
 		return 0;
 
 	default:
