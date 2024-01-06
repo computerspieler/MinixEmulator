@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <time.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 
 #include "services.h"
 #include "macros.h"
@@ -15,7 +16,7 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 	int i;
 	char c;
 	int flags, cmd;
-	int file_desc;
+	int ret;
 	char *buf;
 
 	FS_DEBUG_LOG("Message type: %d\n", mess->m_type);
@@ -99,10 +100,10 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		if(mess->mode & FS_O_WRONLY) flags |= O_WRONLY;
 		if(mess->mode & FS_O_RDWR)   flags |= O_RDWR;
 
-		file_desc = open(buf, flags);
+		ret = open(buf, flags);
 		free(buf);
 
-		return file_desc;
+		return ret;
 
 	case FCNTL:
 		switch(mess->request) {
@@ -117,6 +118,19 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		}
 
 		return fcntl(mess->fd, cmd);
+
+	case MKDIR:
+		buf = malloc(sizeof(char) * mess->name1_length);
+		if(!buf)
+			return -1;
+
+		for(i = 0; i < mess->name1_length; i ++) 
+			buf[i] = env->read_byte(env, mess->name1+i);
+
+		ret = mkdir(buf, mess->mode);
+		free(buf);
+
+		return ret;
 
 	default:
 		FS_ERROR_LOG("Unknown message type: %d\n", mess->m_type);
