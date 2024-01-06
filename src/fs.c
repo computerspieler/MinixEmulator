@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <time.h>
 
 #include "services.h"
 #include "macros.h"
@@ -33,14 +34,19 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 			mess->nbytes);
 		array_set(&env->file_handlers, 1, stdout);
 		
+		// Send everything to stderr, it's easier to debug
+		if(mess->fd == 1)
+			mess->fd = 2;
+
 		for(i = 0; i < mess->nbytes; i ++) {
 			c = env->read_byte(env, mess->buffer+i);
-			write(mess->fd, &c, 1);
+			if(!write(mess->fd, &c, 1))
+				break;
 		}
 		
 		env->response.m_type = 0;
 		env->response.PROC_NR = mess->m_source;
-		return 0;
+		return i;
 	
 	case READ:
 		mess->nbytes &= 0xFFFF;
@@ -50,13 +56,14 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		array_set(&env->file_handlers, 1, stdout);
 		
 		for(i = 0; i < mess->nbytes; i ++) {
-			read(mess->fd, &c, 1);
+			if(!read(mess->fd, &c, 1))
+				break;
 			env->write_byte(env, mess->buffer+i, c);
 		}
 
 		env->response.m_type = 0;
 		env->response.PROC_NR = mess->m_source;
-		return 0;
+		return i;
 
 	default:
 		FS_ERROR_LOG("Unknown message type: %d\n", mess->m_type);
