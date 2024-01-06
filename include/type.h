@@ -125,6 +125,8 @@ struct psinfo {		/* information for the ps(1) program */
 #include "array.h"
 #include "exec_format.h"
 
+#define SIG_COUNT             17	/* number of signals used */
+
 typedef struct Emulator_Env Emulator_Env;
 struct Emulator_Env {
 	int argc;
@@ -152,8 +154,11 @@ struct Emulator_Env {
 	uint32_t stack_ptr_start;
 	uint32_t heap_start;
 
+	uint32_t signal_handlers[SIG_COUNT];
+
 	int (*read_byte)(Emulator_Env*, uint32_t);
 	void (*write_byte)(Emulator_Env*, uint32_t, int);
+	void (*write_dword)(Emulator_Env*, uint32_t, uint32_t);
 };
 
 #endif /* _TYPE_H */

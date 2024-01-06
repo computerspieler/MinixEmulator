@@ -103,7 +103,7 @@ int read_executable(Emulator_Env *env, FILE *fp)
 
 int build_env(Emulator_Env *env, int argc, char* argv[])
 {
-	*env = (Emulator_Env) {0};
+	bzero(env, sizeof(Emulator_Env));
 	
 	env->argc = argc-1;	
 	env->argv = &argv[1];

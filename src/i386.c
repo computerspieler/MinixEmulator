@@ -150,6 +150,33 @@ void write_byte(Emulator_Env* env, uint32_t addr, int c)
 		*val = c;
 }
 
+void write_dword(Emulator_Env* env, uint32_t addr, uint32_t c)
+{
+	int inverted;
+	uint8_t *val;
+	
+	addr += env->data_start;
+	if(
+		get_permission_and_value_to_modify(env, addr+3, &val, X86EMU_PERM_R, NULL) !=
+		get_permission_and_value_to_modify(env, addr, &val, X86EMU_PERM_R, &inverted)
+	)
+		return;
+
+	if(!val)
+		return;
+	
+	val[0] = c & 0xFF;
+	if(inverted) {
+		val[-1] = (c >>  8) & 0xFF;
+		val[-2] = (c >> 16) & 0xFF;
+		val[-3] = (c >> 24) & 0xFF;
+	} else {
+		val[1] = (c >>  8) & 0xFF;
+		val[2] = (c >> 16) & 0xFF;
+		val[3] = (c >> 24) & 0xFF;
+	}
+}
+
 unsigned int memio_handler(x86emu_t *emu, u32 addr, u32 *val, unsigned type)
 {
 	uint8_t *value_to_modify;
@@ -348,6 +375,7 @@ int run_x86_emulator(Emulator_Env *env)
 
 	env->read_byte = read_byte;
 	env->write_byte = write_byte;
+	env->write_dword = write_dword;
 
 	x86_init_stack(env);
 

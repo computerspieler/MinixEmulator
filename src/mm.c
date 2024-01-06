@@ -11,12 +11,14 @@ int mm_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 {
 	MM_DEBUG_LOG("Message type: %d\n", mess->m_type);
 	switch(mess->m_type) {
-	case GETUID:
-		return getuid();
+	case GETUID: return getuid();
+	case GETPID: return getpid();
+
 	case EXIT:
 		env->stop = 1;
 		env->exit_status = mess->m1_i1;
 		return 0;
+
 	case BRK:
 		mess->addr += env->data_start;
 		MM_DEBUG_LOG("new size: %d\n", mess->addr - env->heap_start);
@@ -35,6 +37,13 @@ int mm_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 			env->heap_start + array_size(&env->heap)
 		);
 		return 0;
+	
+	case SIGACTION:
+		env->write_dword(env, mess->sig_osa,
+			env->signal_handlers[mess->sig_nr]);
+		env->signal_handlers[mess->sig_nr] = mess->sig_nsa;
+		return 0;
+
 	default:
 		MM_ERROR_LOG("Unknown message type: %d\n", mess->m_type);
 		return 1;
