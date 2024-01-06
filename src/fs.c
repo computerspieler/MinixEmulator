@@ -65,6 +65,10 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		env->response.PROC_NR = mess->m_source;
 		return i;
 
+	case TIME:
+		env->response.reply_l1 = (uint32_t) time(NULL);
+		return 0;
+
 	default:
 		FS_ERROR_LOG("Unknown message type: %d\n", mess->m_type);
 		return 1;
