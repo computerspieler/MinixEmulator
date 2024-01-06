@@ -14,7 +14,7 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 {
 	int i;
 	char c;
-	int flags;
+	int flags, cmd;
 	int file_desc;
 	char *buf;
 
@@ -103,6 +103,20 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		free(buf);
 
 		return file_desc;
+
+	case FCNTL:
+		switch(mess->request) {
+		case FS_F_DUPFD:  cmd = F_DUPFD;  break;
+		case FS_F_GETFD:  cmd = F_GETFD;  break;
+		case FS_F_SETFD:  cmd = F_SETFD;  break;
+		case FS_F_GETFL:  cmd = F_GETFL;  break;
+		case FS_F_SETFL:  cmd = F_SETFL;  break;
+		case FS_F_GETLK:  cmd = F_GETLK;  break;
+		case FS_F_SETLK:  cmd = F_SETLK;  break;
+		case FS_F_SETLKW: cmd = F_SETLKW; break;
+		}
+
+		return fcntl(mess->fd, cmd);
 
 	default:
 		FS_ERROR_LOG("Unknown message type: %d\n", mess->m_type);
