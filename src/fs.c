@@ -1,7 +1,9 @@
 #include <assert.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <time.h>
+#include <stdlib.h>
 
 #include "services.h"
 #include "macros.h"
@@ -12,6 +14,9 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 {
 	int i;
 	char c;
+	int flags;
+	int file_desc;
+	char *buf;
 
 	FS_DEBUG_LOG("Message type: %d\n", mess->m_type);
 	switch(mess->m_type) {
@@ -68,6 +73,36 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 	case TIME:
 		env->response.reply_l1 = (cpu_ptr) time(NULL);
 		return 0;
+
+	case CLOSE:
+		return close(mess->fd);
+
+	case OPEN:
+		flags = 0;
+
+		buf = malloc(sizeof(char) * mess->name1_length);
+		if(!buf)
+			return -1;
+
+		for(i = 0; i < mess->name1_length; i ++) 
+			buf[i] = env->read_byte(env, mess->name1+i);
+
+		if(mess->mode & FS_O_EXCL) flags |= O_EXCL;
+		if(mess->mode & FS_O_CREAT) flags |= O_CREAT;
+		if(mess->mode & FS_O_TRUNC) flags |= O_TRUNC;
+		if(mess->mode & FS_O_NOCTTY) flags |= O_NOCTTY;
+
+		if(mess->mode & FS_O_APPEND) flags |= O_APPEND;
+		if(mess->mode & FS_O_NONBLOCK) flags |= O_NONBLOCK;
+
+		if(mess->mode & FS_O_RDONLY) flags |= O_RDONLY;
+		if(mess->mode & FS_O_WRONLY) flags |= O_WRONLY;
+		if(mess->mode & FS_O_RDWR)   flags |= O_RDWR;
+
+		file_desc = open(buf, flags);
+		free(buf);
+
+		return file_desc;
 
 	default:
 		FS_ERROR_LOG("Unknown message type: %d\n", mess->m_type);
