@@ -13,7 +13,9 @@ int mm_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 	switch(mess->m_type) {
 	case GETUID: return getuid();
 	case GETPID: return getpid();
-
+	case GETGID:
+		env->response.reply_res2 = getegid();
+		return getgid();
 	case EXIT:
 		env->stop = 1;
 		env->exit_status = mess->m1_i1;
