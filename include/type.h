@@ -159,6 +159,9 @@ struct Emulator_Env {
 	int (*read_byte)(Emulator_Env*, uint32_t);
 	void (*write_byte)(Emulator_Env*, uint32_t, int);
 	void (*write_dword)(Emulator_Env*, uint32_t, uint32_t);
+
+	char *chroot_path;
+	int chroot_path_length;
 };
 
 #endif /* _TYPE_H */

@@ -4,12 +4,42 @@
 #include <fcntl.h>
 #include <time.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 
 #include "services.h"
 #include "macros.h"
 #include "fs.h"
 #include "fs_param.h"
+
+char *get_path(Emulator_Env *env, uint32_t path_ptr, int length)
+{
+	int i;
+	int off;
+	int absolute;
+	char *buf;
+
+	if(env->read_byte(env, path_ptr) == '/') {
+		absolute = 1;
+		off = env->chroot_path_length;
+	} else {
+		absolute = 0;
+		off = 0;
+	}
+
+	buf = malloc(sizeof(char) * (length + off));
+	if(!buf)
+		return NULL;
+
+	if(absolute)
+		memcpy(buf, env->chroot_path, env->chroot_path_length);
+
+	for(i = 0; i < length; i ++) 
+		buf[i+off] = env->read_byte(env, path_ptr+i);
+
+
+	return buf;
+}
 
 int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, int direction)
 {
@@ -81,12 +111,13 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 	case OPEN:
 		flags = 0;
 
-		buf = malloc(sizeof(char) * mess->name1_length);
+		if(mess->mode & FS_O_CREAT)
+			buf = get_path(env, mess->buffer, mess->name1_length);
+		else
+			buf = get_path(env, mess->name, mess->name_length);
+
 		if(!buf)
 			return -1;
-
-		for(i = 0; i < mess->name1_length; i ++) 
-			buf[i] = env->read_byte(env, mess->name1+i);
 
 		if(mess->mode & FS_O_EXCL) flags |= O_EXCL;
 		if(mess->mode & FS_O_CREAT) flags |= O_CREAT;
@@ -120,14 +151,21 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		return fcntl(mess->fd, cmd);
 
 	case MKDIR:
-		buf = malloc(sizeof(char) * mess->name1_length);
+		buf = get_path(env, mess->buffer, mess->name1_length);
 		if(!buf)
 			return -1;
 
-		for(i = 0; i < mess->name1_length; i ++) 
-			buf[i] = env->read_byte(env, mess->buffer+i);
-
 		ret = mkdir(buf, mess->mode);
+		free(buf);
+
+		return ret;
+
+	case RMDIR:
+		buf = get_path(env, mess->name, mess->name_length);
+		if(!buf)
+			return -1;
+
+		ret = rmdir(buf);
 		free(buf);
 
 		return ret;
@@ -136,12 +174,9 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		return umask(mess->co_mode);
 
 	case UNLINK:
-		buf = malloc(sizeof(char) * mess->name1_length);
+		buf = get_path(env, mess->name, mess->name_length);
 		if(!buf)
 			return -1;
-
-		for(i = 0; i < mess->name1_length; i ++) 
-			buf[i] = env->read_byte(env, mess->buffer+i);
 
 		ret = unlink(buf);
 		free(buf);
@@ -152,13 +187,9 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		return lseek(mess->ls_fd, mess->offset, mess->whence);
 
 	case ACCESS:
-		buf = malloc(sizeof(char) * mess->name1_length);
+		buf = get_path(env, mess->name, mess->name_length);
 		if(!buf)
 			return -1;
-
-		for(i = 0; i < mess->name1_length; i ++) 
-			buf[i] = env->read_byte(env, mess->buffer+i);
-
 		ret = access(buf, mess->m3_i2);
 		free(buf);
 

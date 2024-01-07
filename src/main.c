@@ -10,7 +10,7 @@
 
 void die()
 {
-    DEBUG_LOG("Usage: emulator [EXECUTABLE] [ARGUMENTS]\n");
+    DEBUG_LOG("Usage: emulator [CHROOT] [EXECUTABLE] [ARGUMENTS]\n");
 	exit(EXIT_FAILURE);
 }
 
@@ -105,8 +105,8 @@ int build_env(Emulator_Env *env, int argc, char* argv[])
 {
 	bzero(env, sizeof(Emulator_Env));
 	
-	env->argc = argc-1;	
-	env->argv = &argv[1];
+	env->argc = argc-2;	
+	env->argv = &argv[2];
 	env->file_handlers = array_create(sizeof(FILE*));	
 	env->stack = array_create(sizeof(char));
 	env->heap = array_create(sizeof(char));
@@ -135,13 +135,16 @@ int main(int argc, char* argv[])
 	FILE *fp;
 	Emulator_Env env;
 
-	if(argc < 2)
+	if(argc < 3)
 		die();
 
 	if(build_env(&env, argc, argv))
 		return -1;
 
-	fp = fopen(argv[1], "r");
+	env.chroot_path = argv[1];
+	env.chroot_path_length = strlen(argv[1]);
+
+	fp = fopen(argv[2], "r");
 	if(!fp) {
 		perror("fopen");
 		destroy_env(&env);
