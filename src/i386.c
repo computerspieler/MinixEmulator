@@ -327,19 +327,16 @@ void x86_init_stack(Emulator_Env *env)
 		array_push(&env->stack, &c);
 	}
 
+	array_push(&env->stack, NULL);
+	array_push(&env->stack, NULL);
+	array_push(&env->stack, NULL);
+	array_push(&env->stack, NULL);
 	for(i = env->argc-1; i >= 0; i --) {
-		address = ~0 - args_start[i];
+		address = ~0 - args_start[i] - env->data_start;
 		for(j = 0; j < 4; j ++) {
 			c = (address >> (8*(3-j))) & 0xFF;
 			array_push(&env->stack, &c);
 		}
-	}
-
-	// Push argv
-	address = array_size(&env->stack);
-	for(j = 0; j < 4; j ++) {
-		c = (address >> (8*(3-j))) & 0xFF;
-		array_push(&env->stack, &c);
 	}
 
 	// Push argc
@@ -377,8 +374,6 @@ int run_x86_emulator(Emulator_Env *env)
 	env->write_byte = write_byte;
 	env->write_dword = write_dword;
 
-	x86_init_stack(env);
-
 	env->text_start = 0x0;
 	if(TEXT_DATA_SEPERARED(env))
 		env->data_start = 0x80000000;
@@ -387,6 +382,9 @@ int run_x86_emulator(Emulator_Env *env)
 	env->bss_start = env->data_start + env->hdr.a_data;
 	env->heap_start = env->bss_start + env->hdr.a_bss;
 
+
+	x86_init_stack(env);
+	
 	emu->x86.R_EBP =
 	emu->x86.R_ESP = ~0
 		- env->stack_ptr_start
