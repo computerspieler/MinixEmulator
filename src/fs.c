@@ -125,12 +125,15 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 			return -1;
 
 		for(i = 0; i < mess->name1_length; i ++) 
-			buf[i] = env->read_byte(env, mess->name1+i);
+			buf[i] = env->read_byte(env, mess->buffer+i);
 
 		ret = mkdir(buf, mess->mode);
 		free(buf);
 
 		return ret;
+
+	case UMASK:
+		return umask(mess->co_mode);
 
 	default:
 		FS_ERROR_LOG("Unknown message type: %d\n", mess->m_type);
