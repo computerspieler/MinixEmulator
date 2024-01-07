@@ -135,6 +135,35 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 	case UMASK:
 		return umask(mess->co_mode);
 
+	case UNLINK:
+		buf = malloc(sizeof(char) * mess->name1_length);
+		if(!buf)
+			return -1;
+
+		for(i = 0; i < mess->name1_length; i ++) 
+			buf[i] = env->read_byte(env, mess->buffer+i);
+
+		ret = unlink(buf);
+		free(buf);
+
+		return ret;
+	
+	case LSEEK:
+		return lseek(mess->ls_fd, mess->offset, mess->whence);
+
+	case ACCESS:
+		buf = malloc(sizeof(char) * mess->name1_length);
+		if(!buf)
+			return -1;
+
+		for(i = 0; i < mess->name1_length; i ++) 
+			buf[i] = env->read_byte(env, mess->buffer+i);
+
+		ret = access(buf, mess->m3_i2);
+		free(buf);
+
+		return ret;
+
 	default:
 		FS_ERROR_LOG("Unknown message type: %d\n", mess->m_type);
 		return 1;
