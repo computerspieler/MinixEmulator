@@ -1,14 +1,19 @@
 #include <assert.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <sys/wait.h>
 
 #include "services.h"
 #include "macros.h"
 #include "mm.h"
 #include "mm_param.h"
+#include "utils.h"
 
 int mm_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, int direction)
 {
+	pid_t ret_pid;
+	int ret_status;
+
 	MM_DEBUG_LOG("Message type: %d\n", mess->m_type);
 	switch(mess->m_type) {
 	case GETUID: return getuid();
@@ -45,6 +50,14 @@ int mm_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 			env->signal_handlers[mess->sig_nr]);
 		env->signal_handlers[mess->sig_nr] = mess->sig_nsa;
 		return 0;
+	
+	case FORK:
+		return fork();
+	
+	case WAIT:
+		ret_pid = wait(&ret_status);
+		env->response.m2_i1 = ret_status;
+		return ret_pid;
 
 	default:
 		MM_ERROR_LOG("Unknown message type: %d\n", mess->m_type);
