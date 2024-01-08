@@ -304,19 +304,19 @@ skip_permissions_check:
 	return 0;
 }
 
-void x86_init_stack(Emulator_Env *env)
+void x86_init_stack(Emulator_Env *env, int argc, char* argv[])
 {
 	int i, j;
 	cpu_ptr address;
 	char c;
 	size_t stack_size;
 	size_t arg_size;
-	size_t args_start[env->argc];
+	size_t args_start[argc];
 
-	for(i = env->argc-1; i >= 0; i --) {
-		arg_size = strlen(env->argv[i]);
+	for(i = argc-1; i >= 0; i --) {
+		arg_size = strlen(argv[i]);
 		for(j = arg_size; j >= 0; j --)
-			array_push(&env->stack, &env->argv[i][j]);
+			array_push(&env->stack, &argv[i][j]);
 		args_start[i] = array_size(&env->stack) - 1;
 	}
 
@@ -331,7 +331,7 @@ void x86_init_stack(Emulator_Env *env)
 	array_push(&env->stack, NULL);
 	array_push(&env->stack, NULL);
 	array_push(&env->stack, NULL);
-	for(i = env->argc-1; i >= 0; i --) {
+	for(i = argc-1; i >= 0; i --) {
 		address = ~0 - args_start[i] - env->data_start;
 		for(j = 0; j < 4; j ++) {
 			c = (address >> (8*(3-j))) & 0xFF;
@@ -340,7 +340,7 @@ void x86_init_stack(Emulator_Env *env)
 	}
 
 	// Push argc
-	address = env->argc;
+	address = argc;
 	for(j = 0; j < 4; j ++) {
 		c = (address >> (8*(3-j))) & 0xFF;
 		array_push(&env->stack, &c);
@@ -357,6 +357,23 @@ void x86_init_stack(Emulator_Env *env)
 		array_push(&env->stack, NULL);
 }
 
+void x86_emulator_init(Emulator_Env *env, int argc, char* argv[])
+{
+	env->read_byte = read_byte;
+	env->write_byte = write_byte;
+	env->write_dword = write_dword;
+
+	env->text_start = 0x0;
+	if(TEXT_DATA_SEPERARED(env))
+		env->data_start = 0x80000000;
+	else
+		env->data_start = env->text_start;
+	env->bss_start = env->data_start + env->hdr.a_data;
+	env->heap_start = env->bss_start + env->hdr.a_bss;
+
+	x86_init_stack(env, argc, argv);
+}
+
 int run_x86_emulator(Emulator_Env *env)
 {
 	x86emu_t *emu;
@@ -370,21 +387,6 @@ int run_x86_emulator(Emulator_Env *env)
 	x86emu_set_log(emu, 1000000, flush_log);
 	x86emu_clear_log(emu, 0);
 
-	env->read_byte = read_byte;
-	env->write_byte = write_byte;
-	env->write_dword = write_dword;
-
-	env->text_start = 0x0;
-	if(TEXT_DATA_SEPERARED(env))
-		env->data_start = 0x80000000;
-	else
-		env->data_start = env->text_start;
-	env->bss_start = env->data_start + env->hdr.a_data;
-	env->heap_start = env->bss_start + env->hdr.a_bss;
-
-
-	x86_init_stack(env);
-	
 	emu->x86.R_EBP =
 	emu->x86.R_ESP = ~0
 		- env->stack_ptr_start

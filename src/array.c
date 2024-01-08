@@ -75,3 +75,8 @@ void array_set_size(Array* s, size_t new_len)
 
 	s->logical_size = new_len;
 }
+
+void array_clear(Array* s)
+{
+	s->logical_size = 0;
+}

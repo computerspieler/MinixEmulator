@@ -129,14 +129,8 @@ struct psinfo {		/* information for the ps(1) program */
 
 typedef struct Emulator_Env Emulator_Env;
 struct Emulator_Env {
-	int argc;
-	int envc;
-	char** argv;
-	char** envp;
 	int stop;
 	int exit_status;
-
-	Array file_handlers;
 
 	message response;
 	struct exec hdr;

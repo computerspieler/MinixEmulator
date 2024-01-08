@@ -6,6 +6,7 @@
 #include "exec_format.h"
 #include "type.h"
 
-int run_x86_emulator(Emulator_Env *program_env);
+void x86_emulator_init(Emulator_Env *env, int argc, char* argv[]);
+int run_x86_emulator(Emulator_Env *env);
 
 #endif

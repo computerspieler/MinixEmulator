@@ -38,7 +38,6 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 	switch(mess->m_type) {
 	case IOCTL:
 		FS_DEBUG_LOG("Line %x;\n", mess->TTY_LINE);
-		array_set(&env->file_handlers, 1, stdout);
 		
 		env->response.m_type   = DEV_IOCTL;
 		env->response.DEVICE   = (mess->TTY_LINE >> MINOR) & 0xFF;
@@ -53,7 +52,6 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		FS_DEBUG_LOG("fd %x; Buffer: %x; Size: %x\n",
 			mess->fd, mess->buffer,
 			mess->nbytes);
-		array_set(&env->file_handlers, 1, stdout);
 		
 		// Send everything to stderr, it's easier to debug
 		if(mess->fd == 1)
@@ -74,7 +72,6 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		FS_DEBUG_LOG("fd %x; Buffer: %x; Size: %x\n",
 			mess->fd, mess->buffer,
 			mess->nbytes);
-		array_set(&env->file_handlers, 1, stdout);
 		
 		if(fstat(mess->fd, &statbuf) < 0)
 			return 0;
