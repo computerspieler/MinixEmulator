@@ -1,3 +1,5 @@
 bin
 *.code-workspace
 .vscode
+env
+exec

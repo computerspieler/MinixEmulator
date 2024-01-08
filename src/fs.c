@@ -74,15 +74,14 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 			mess->nbytes);
 		
 		if(fstat(mess->fd, &statbuf) < 0)
-			return 0;
+			return -1;
 
 		if(S_ISDIR(statbuf.st_mode)) {
+			// FIXME: This part will fail if a folder
+			// is too big
 			directory = fdopendir(mess->fd);
 
 			i = 0;
-
-			//FIXME: There might be some issues if the buffer's length
-			// isn't a multiple of 16
 			while((dir_ent = readdir(directory)) != NULL) {
 				/*
 					This is the structure used for a
@@ -111,6 +110,8 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 				if(i >= mess->nbytes)
 					break;
 			}
+			
+			closedir(directory);
 		} else {
 			for(i = 0; i < mess->nbytes; i ++) {
 				if(!read(mess->fd, &c, 1))
