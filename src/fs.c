@@ -5,49 +5,34 @@
 #include <time.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
 #include <sys/stat.h>
 
 #include "services.h"
 #include "macros.h"
 #include "fs.h"
+#include "fs_stat.h"
 #include "fs_param.h"
+#include "utils.h"
 
-char *get_path(Emulator_Env *env, uint32_t path_ptr, int length)
-{
-	int i;
-	int off;
-	int absolute;
-	char *buf;
-
-	if(env->read_byte(env, path_ptr) == '/') {
-		absolute = 1;
-		off = env->chroot_path_length;
-	} else {
-		absolute = 0;
-		off = 0;
+#define WRITE_IF_POSSIBLE(base_address, index, max_index, data)	\
+	if((index) < (max_index)) {	\
+		env->write_byte(env, (base_address) + (index), (data));	\
 	}
-
-	buf = malloc(sizeof(char) * (length + off));
-	if(!buf)
-		return NULL;
-
-	if(absolute)
-		memcpy(buf, env->chroot_path, env->chroot_path_length);
-
-	for(i = 0; i < length; i ++) 
-		buf[i+off] = env->read_byte(env, path_ptr+i);
-
-
-	return buf;
-}
 
 int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, int direction)
 {
-	int i;
+	int i, j;
 	char c;
 	int flags, cmd;
 	int ret;
 	char *buf;
+	struct fs_stat fs_statbuf;
+	struct stat statbuf;
+
+	DIR* directory;
+	struct dirent *dir_ent;
+	int dir_ent_name_length;
 
 	FS_DEBUG_LOG("Message type: %d\n", mess->m_type);
 	switch(mess->m_type) {
@@ -91,14 +76,55 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 			mess->nbytes);
 		array_set(&env->file_handlers, 1, stdout);
 		
-		for(i = 0; i < mess->nbytes; i ++) {
-			if(!read(mess->fd, &c, 1))
-				break;
-			env->write_byte(env, mess->buffer+i, c);
+		if(fstat(mess->fd, &statbuf) < 0)
+			return 0;
+
+		if(S_ISDIR(statbuf.st_mode)) {
+			directory = fdopendir(mess->fd);
+
+			i = 0;
+
+			//FIXME: There might be some issues if the buffer's length
+			// isn't a multiple of 16
+			while((dir_ent = readdir(directory)) != NULL) {
+				/*
+					This is the structure used for a
+					directory's entry :
+					struct _v7_direct {		
+						unsigned short	d_ino;
+						char			d_name[14];
+					};
+				*/
+				WRITE_IF_POSSIBLE(mess->buffer, i, mess->nbytes,
+					dir_ent->d_ino & 0xFF);
+				i ++;
+				WRITE_IF_POSSIBLE(mess->buffer, i, mess->nbytes,
+					(dir_ent->d_ino >> 8) & 0xFF);
+				i ++;
+
+				dir_ent_name_length = strlen(dir_ent->d_name);
+				for(j = 0; j < MIN(dir_ent_name_length, 14); j ++, i ++) {
+					WRITE_IF_POSSIBLE(mess->buffer, i, mess->nbytes,
+						dir_ent->d_name[j]);
+				}
+				for(; j < 14; j ++, i ++) {
+					WRITE_IF_POSSIBLE(mess->buffer, i, mess->nbytes, 0);
+				}
+				
+				if(i >= mess->nbytes)
+					break;
+			}
+		} else {
+			for(i = 0; i < mess->nbytes; i ++) {
+				if(!read(mess->fd, &c, 1))
+					break;
+				env->write_byte(env, mess->buffer+i, c);
+			}
+
+			env->response.m_type = 0;
+			env->response.PROC_NR = mess->m_source;
 		}
 
-		env->response.m_type = 0;
-		env->response.PROC_NR = mess->m_source;
 		return i;
 
 	case TIME:
@@ -132,6 +158,7 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		if(mess->mode & FS_O_RDWR)   flags |= O_RDWR;
 
 		ret = open(buf, flags);
+
 		free(buf);
 
 		return ret;
@@ -192,6 +219,51 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 			return -1;
 		ret = access(buf, mess->m3_i2);
 		free(buf);
+
+		return ret;
+
+	case STAT:
+		buf = get_path(env, mess->buffer, mess->name1_length);
+		if(!buf)
+			return -1;
+
+		ret = stat(buf, &statbuf);
+		free(buf);
+
+		fs_statbuf.s_dev   = statbuf.st_dev;
+		fs_statbuf.s_ino   = statbuf.st_ino;
+		fs_statbuf.s_mode  = statbuf.st_mode;
+		fs_statbuf.s_nlink = statbuf.st_nlink;
+		fs_statbuf.s_uid   = statbuf.st_uid;
+		fs_statbuf.s_gid   = statbuf.st_gid;
+		fs_statbuf.s_rdev  = statbuf.st_rdev;
+		fs_statbuf.s_size  = statbuf.st_size;
+		fs_statbuf.s_atime = statbuf.st_atim.tv_sec;
+		fs_statbuf.s_mtime = statbuf.st_mtim.tv_sec;
+		fs_statbuf.s_ctime = statbuf.st_ctim.tv_sec;
+
+		for(i = 0; i < (int) sizeof(struct fs_stat); i ++)
+			env->write_byte(env, mess->m1_p2+i, ((uint8_t*)&fs_statbuf)[i]);
+
+		return 0;
+
+	case FSTAT:
+		ret = fstat(mess->fd, &statbuf);
+
+		fs_statbuf.s_dev = statbuf.st_dev;
+		fs_statbuf.s_ino = statbuf.st_ino;
+		fs_statbuf.s_mode = statbuf.st_mode;
+		fs_statbuf.s_nlink = statbuf.st_nlink;
+		fs_statbuf.s_uid = statbuf.st_uid;
+		fs_statbuf.s_gid = statbuf.st_gid;
+		fs_statbuf.s_rdev = statbuf.st_rdev;
+		fs_statbuf.s_size = statbuf.st_size;
+		fs_statbuf.s_atime = statbuf.st_atim.tv_sec;
+		fs_statbuf.s_mtime = statbuf.st_mtim.tv_sec;
+		fs_statbuf.s_ctime = statbuf.st_ctim.tv_sec;
+
+		for(i = 0; i < (int) sizeof(struct fs_stat); i ++)
+			env->write_byte(env, mess->m1_p1+i, ((uint8_t*)&fs_statbuf)[i]);
 
 		return ret;
 
