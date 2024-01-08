@@ -196,15 +196,20 @@ unsigned int memio_handler(x86emu_t *emu, u32 addr, u32 *val, unsigned type)
 		return 1;
 	}
 
+	permissions = get_permission_and_value_to_modify(
+		env, addr, &value_to_modify, type, &inverted);
+	
+	// Check if we have a valid value
+	if(!value_to_modify) {
+		*val = -1;
+		return 1;
+	}
+	
 	switch(bits) {
 	case X86EMU_MEMIO_8_NOPERM:
-		other_perm = get_permission_and_value_to_modify(
-			env, addr, &value_to_modify, type, NULL);
 		goto skip_permissions_check;
-	
 	case X86EMU_MEMIO_8:
-		other_perm = get_permission_and_value_to_modify(
-			env, addr, &value_to_modify, type, NULL);
+		other_perm = permissions;
 		break;
 	case X86EMU_MEMIO_16:
 		other_perm = get_permission_and_value_to_modify(
@@ -215,18 +220,10 @@ unsigned int memio_handler(x86emu_t *emu, u32 addr, u32 *val, unsigned type)
 			env, addr+3, &value_to_modify, type, NULL);
 		break;
 	}
-	permissions = get_permission_and_value_to_modify(
-		env, addr, &value_to_modify, type, &inverted);
 
 	// If we're between two differents
 	// segments
 	if(other_perm != permissions) {
-		*val = -1;
-		return 1;
-	}
-
-	// Find the value
-	if(!value_to_modify) {
 		*val = -1;
 		return 1;
 	}
