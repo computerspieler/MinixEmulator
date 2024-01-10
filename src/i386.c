@@ -80,25 +80,33 @@ int get_permission_and_value_to_modify(
 
 	int permissions;
 
-	permissions = 0;
-	*value_to_modify = NULL;
 	stack_size = array_size(&env->stack) - 1;
 	heap_size = array_size(&env->heap);
+	
+	permissions = 0;
+	if(value_to_modify)
+		*value_to_modify = NULL;
 	
 	if(inverted) *inverted = 0;
 
 	if(addr >= env->text_start && addr < env->text_start + env->hdr.a_text) {
-		*value_to_modify = env->text + (addr - env->text_start);
+		if(value_to_modify)
+			*value_to_modify =
+				env->text + (addr - env->text_start);
 		permissions |= X86EMU_PERM_X;
 	}
 
 	if(addr >= env->data_start && addr < env->data_start + env->hdr.a_data) {
-		*value_to_modify = env->data + (addr - env->data_start);
+		if(value_to_modify)
+			*value_to_modify =
+				env->data + (addr - env->data_start);
 		permissions |= X86EMU_PERM_R | X86EMU_PERM_W;
 	}
 
 	if(addr >= env->bss_start && addr < env->bss_start + env->hdr.a_bss) {
-		*value_to_modify = env->bss + (addr - env->bss_start);
+		if(value_to_modify)
+			*value_to_modify =
+				env->bss + (addr - env->bss_start);
 		permissions |= X86EMU_PERM_R | X86EMU_PERM_W;
 	}
 
@@ -115,14 +123,18 @@ int get_permission_and_value_to_modify(
 	}
 
 	if(addr > (uint32_t)(~0 - stack_size))  {
-		*value_to_modify = env->stack.array + (~0 - addr);
+		if(value_to_modify)
+			*value_to_modify =
+				env->stack.array + (~0 - addr);
 		permissions |= X86EMU_PERM_R | X86EMU_PERM_W;
 
 		if(inverted) *inverted = 1;
 	}
 
 	if(addr >= env->heap_start && addr < env->heap_start + heap_size)  {
-		*value_to_modify = env->heap.array + (addr - env->heap_start);
+		if(value_to_modify)
+			*value_to_modify =
+				env->heap.array + (addr - env->heap_start);
 		permissions |= X86EMU_PERM_R | X86EMU_PERM_W;
 	}
 
@@ -213,11 +225,11 @@ unsigned int memio_handler(x86emu_t *emu, u32 addr, u32 *val, unsigned type)
 		break;
 	case X86EMU_MEMIO_16:
 		other_perm = get_permission_and_value_to_modify(
-			env, addr+1, &value_to_modify, type, NULL);
+			env, addr+1, NULL, type, NULL);
 		break;
 	case X86EMU_MEMIO_32:
 		other_perm = get_permission_and_value_to_modify(
-			env, addr+3, &value_to_modify, type, NULL);
+			env, addr+3, NULL, type, NULL);
 		break;
 	}
 
@@ -318,9 +330,8 @@ void x86_init_stack(Emulator_Env *env, int argc, char* argv[])
 	}
 
 	// Push envp (TODO)
-	address = 0;
 	for(j = 0; j < 4; j ++) {
-		c = (address >> (8*(3-j))) & 0xFF;
+		c = (0 >> (8*(3-j))) & 0xFF;
 		array_push(&env->stack, &c);
 	}
 
@@ -337,9 +348,8 @@ void x86_init_stack(Emulator_Env *env, int argc, char* argv[])
 	}
 
 	// Push argc
-	address = argc;
 	for(j = 0; j < 4; j ++) {
-		c = (address >> (8*(3-j))) & 0xFF;
+		c = (argc >> (8*(3-j))) & 0xFF;
 		array_push(&env->stack, &c);
 	}
 
