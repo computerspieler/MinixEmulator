@@ -65,3 +65,5 @@
 
 #define REBOOT		  76
 #define SVRCTL		  77
+
+extern char* callnr_to_string[];

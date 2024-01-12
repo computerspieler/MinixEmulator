@@ -34,7 +34,8 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 	struct dirent *dir_ent;
 	int dir_ent_name_length;
 
-	FS_DEBUG_LOG("Message type: %d\n", mess->m_type);
+	FS_DEBUG_LOG("Message type: %s(%d)\n",
+		callnr_to_string[mess->m_type], mess->m_type);
 	switch(mess->m_type) {
 	case IOCTL:
 		FS_DEBUG_LOG("Line %x;\n", mess->TTY_LINE);
@@ -248,14 +249,14 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 	case FSTAT:
 		ret = fstat(mess->fd, &statbuf);
 
-		fs_statbuf.s_dev = statbuf.st_dev;
-		fs_statbuf.s_ino = statbuf.st_ino;
-		fs_statbuf.s_mode = statbuf.st_mode;
+		fs_statbuf.s_dev   = statbuf.st_dev;
+		fs_statbuf.s_ino   = statbuf.st_ino;
+		fs_statbuf.s_mode  = statbuf.st_mode;
 		fs_statbuf.s_nlink = statbuf.st_nlink;
-		fs_statbuf.s_uid = statbuf.st_uid;
-		fs_statbuf.s_gid = statbuf.st_gid;
-		fs_statbuf.s_rdev = statbuf.st_rdev;
-		fs_statbuf.s_size = statbuf.st_size;
+		fs_statbuf.s_uid   = statbuf.st_uid;
+		fs_statbuf.s_gid   = statbuf.st_gid;
+		fs_statbuf.s_rdev  = statbuf.st_rdev;
+		fs_statbuf.s_size  = statbuf.st_size;
 		fs_statbuf.s_atime = statbuf.st_atim.tv_sec;
 		fs_statbuf.s_mtime = statbuf.st_mtim.tv_sec;
 		fs_statbuf.s_ctime = statbuf.st_ctim.tv_sec;
@@ -266,7 +267,7 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		return ret;
 
 	default:
-		FS_ERROR_LOG("Unknown message type: %d\n", mess->m_type);
+		FS_ERROR_LOG("Unknown message type : %d\n", mess->m_type);
 		return 1;
 	}
 }

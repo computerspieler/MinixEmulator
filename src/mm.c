@@ -19,7 +19,8 @@ int mm_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 	int ret_status;
 	Emulator_Env new_env;
 
-	MM_DEBUG_LOG("Message type: %d\n", mess->m_type);
+	MM_DEBUG_LOG("Message type: %s(%d)\n",
+		callnr_to_string[mess->m_type], mess->m_type);
 	switch(mess->m_type) {
 	case GETUID: return getuid();
 	case GETPID: return getpid();

@@ -40,13 +40,15 @@ int intr_handler(x86emu_t *emu, u8 num, unsigned type)
 				message_ptr + i
 			);
 		
+/*
 		if(i % 8 == 0)
 			DEBUG_LOG("%08lx: ", message_ptr + i);
 		DEBUG_LOG("%02x ", ((uint8_t*)&mess)[i]);
 		if(i % 8 == 7 || i == sizeof(message) - 1)
 			DEBUG_LOG("\n");
+*/
 	}
-	DEBUG_LOG("Pointer: %8x\n", message_ptr);
+//	DEBUG_LOG("Pointer: %8x\n", message_ptr);
 
 	emu->x86.R_EAX = interpret_message(env, emu->x86.R_EAX, &mess, direction);
 	if(emu->x86.R_EAX)
@@ -436,7 +438,7 @@ int run_x86_emulator(Emulator_Env *env)
 	DEBUG_LOG("Text length: %8x; Data length: %8x; BSS length: %8x; Stack length: %8lx\n",
 		env->hdr.a_text, env->hdr.a_data, env->hdr.a_bss, array_size(&env->stack));
 
-	emu->log.trace = X86EMU_TRACE_CODE | X86EMU_TRACE_REGS | X86EMU_TRACE_DATA;
+	emu->log.trace = 0;//X86EMU_TRACE_CODE | X86EMU_TRACE_REGS | X86EMU_TRACE_DATA;
 	x86emu_run(emu, X86EMU_RUN_LOOP | X86EMU_RUN_NO_CODE | X86EMU_RUN_NO_EXEC);
 	x86emu_dump(emu, X86EMU_DUMP_DEFAULT);
 	x86emu_clear_log(emu, 1);
