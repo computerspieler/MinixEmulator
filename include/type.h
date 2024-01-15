@@ -141,6 +141,7 @@ struct Emulator_Env {
 	Array stack;
 	Array heap;
 	Array symbols;
+	Array file_handlers;
 
 	uint32_t text_start;
 	uint32_t data_start;
@@ -156,6 +157,20 @@ struct Emulator_Env {
 
 	char *chroot_path;
 	int chroot_path_length;
+};
+
+#include <stdio.h>
+#include <dirent.h>
+
+#include "fs_stat.h"
+
+typedef struct FileHandler FileHandler;
+struct FileHandler
+{
+	int has_stat;
+	DIR *dir_p;
+	int file_d;
+	struct fs_stat statbuf;
 };
 
 #endif /* _TYPE_H */

@@ -80,3 +80,13 @@ void array_clear(Array* s)
 {
 	s->logical_size = 0;
 }
+
+void array_get(Array* s, int i, void* out)
+{
+	assert(out);
+	assert(i >= 0);
+	if(i >= array_size(s))
+		return;
+
+	memcpy(out, s->array + i*s->element_size, s->element_size);
+}

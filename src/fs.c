@@ -12,8 +12,8 @@
 #include "macros.h"
 #include "fs.h"
 #include "fs_stat.h"
-#include "fs_param.h"
 #include "utils.h"
+#include "fs_param.h"
 
 #define WRITE_IF_POSSIBLE(base_address, index, max_index, data)	\
 	if((index) < (max_index)) {	\
@@ -26,16 +26,14 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 	char c;
 	int flags, cmd;
 	int ret;
-	char *buf;
-	struct fs_stat fs_statbuf;
-	struct stat statbuf;
-
-	DIR* directory;
+	char *path;
+	FileHandler file_handler;
 	struct dirent *dir_ent;
 	int dir_ent_name_length;
 
 	FS_DEBUG_LOG("Message type: %s(%d)\n",
 		callnr_to_string[mess->m_type], mess->m_type);
+
 	switch(mess->m_type) {
 	case IOCTL:
 		FS_DEBUG_LOG("Line %x;\n", mess->TTY_LINE);
@@ -49,18 +47,24 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		return 0;
 	
 	case WRITE:
-		mess->nbytes &= 0xFFFF;
-		FS_DEBUG_LOG("fd %x; Buffer: %x; Size: %x\n",
-			mess->fd, mess->buffer,
-			mess->nbytes);
-		
-		// Send everything to stderr, it's easier to debug
-		if(mess->fd == 1)
-			mess->fd = 2;
+#ifdef DEBUG
+		// Send everything to stderr, it's
+		// easier to debug
+		if(mess->fd == STDOUT_FILENO)
+			mess->fd = STDERR_FILENO;
+#endif
+		array_get(&env->file_handlers, mess->fd, &file_handler);
+		if(!file_handler.has_stat)
+			return -1;
+
+		// We don't support writing to directory
+		// for now
+		if(file_handler.dir_p)
+			return -1;
 
 		for(i = 0; i < mess->nbytes; i ++) {
 			c = env->read_byte(env, mess->buffer+i);
-			if(!write(mess->fd, &c, 1))
+			if(!write(file_handler.file_d, &c, sizeof(char)))
 				break;
 		}
 		
@@ -69,21 +73,11 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		return i;
 	
 	case READ:
-		mess->nbytes &= 0xFFFF;
-		FS_DEBUG_LOG("fd %x; Buffer: %x; Size: %x\n",
-			mess->fd, mess->buffer,
-			mess->nbytes);
+		array_get(&env->file_handlers, mess->fd, &file_handler);
 		
-		if(fstat(mess->fd, &statbuf) < 0)
-			return -1;
-
-		if(S_ISDIR(statbuf.st_mode)) {
-			// FIXME: This part will fail if a folder
-			// is too big
-			directory = fdopendir(mess->fd);
-
+		if(file_handler.dir_p) {
 			i = 0;
-			while((dir_ent = readdir(directory)) != NULL) {
+			while((dir_ent = readdir(file_handler.dir_p)) != NULL) {
 				/*
 					This is the structure used for a
 					directory's entry :
@@ -111,11 +105,9 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 				if(i >= mess->nbytes)
 					break;
 			}
-			
-			closedir(directory);
 		} else {
 			for(i = 0; i < mess->nbytes; i ++) {
-				if(!read(mess->fd, &c, 1))
+				if(!read(file_handler.file_d, &c, sizeof(char)))
 					break;
 				env->write_byte(env, mess->buffer+i, c);
 			}
@@ -131,17 +123,22 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		return 0;
 
 	case CLOSE:
-		return close(mess->fd);
+		array_get(&env->file_handlers, mess->fd, &file_handler);
+		
+		if(file_handler.dir_p)
+			return closedir(file_handler.dir_p);
+		else
+			return close(file_handler.file_d);
 
 	case OPEN:
 		flags = 0;
 
 		if(mess->mode & FS_O_CREAT)
-			buf = get_path(env, mess->buffer, mess->name1_length);
+			path = get_path(env, mess->buffer, mess->name1_length);
 		else
-			buf = get_path(env, mess->name, mess->name_length);
+			path = get_path(env, mess->name, mess->name_length);
 
-		if(!buf)
+		if(!path)
 			return -1;
 
 		if(mess->mode & FS_O_EXCL) flags |= O_EXCL;
@@ -155,14 +152,38 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		if(mess->mode & FS_O_RDONLY) flags |= O_RDONLY;
 		if(mess->mode & FS_O_WRONLY) flags |= O_WRONLY;
 		if(mess->mode & FS_O_RDWR)   flags |= O_RDWR;
+		
+		ret = get_stat_from_path(path, &file_handler.statbuf);
 
-		ret = open(buf, flags);
-
-		free(buf);
+		if(!ret && FS_S_ISDIR(file_handler.statbuf.s_mode)) {
+			file_handler.dir_p = opendir(path);
+			file_handler.file_d = -1;
+			file_handler.has_stat = 1;
+			free(path);
+			if(!file_handler.dir_p)
+				return -1;
+		} else {
+			file_handler.file_d = open(path, flags);
+			file_handler.dir_p = NULL;
+			free(path);
+			if(file_handler.dir_p)
+				return -1;
+			
+			if(!ret)
+				file_handler.has_stat =
+					get_stat(file_handler.file_d, &file_handler.statbuf);
+			else
+				file_handler.has_stat = 1;
+		}
+		
+		ret = array_size(&env->file_handlers);
+		array_push(&env->file_handlers, &file_handler);
 
 		return ret;
 
 	case FCNTL:
+		array_get(&env->file_handlers, mess->fd, &file_handler);
+
 		switch(mess->request) {
 		case FS_F_DUPFD:  cmd = F_DUPFD;  break;
 		case FS_F_GETFD:  cmd = F_GETFD;  break;
@@ -174,25 +195,30 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		case FS_F_SETLKW: cmd = F_SETLKW; break;
 		}
 
-		return fcntl(mess->fd, cmd);
+		// FIXME: Don't ignore fcntl
+		// for directories
+		if(file_handler.file_d >= 0)
+			return fcntl(file_handler.file_d, cmd);
+		else
+			return 0;
 
 	case MKDIR:
-		buf = get_path(env, mess->buffer, mess->name1_length);
-		if(!buf)
+		path = get_path(env, mess->buffer, mess->name1_length);
+		if(!path)
 			return -1;
 
-		ret = mkdir(buf, mess->mode);
-		free(buf);
+		ret = mkdir(path, mess->mode);
+		free(path);
 
 		return ret;
 
 	case RMDIR:
-		buf = get_path(env, mess->name, mess->name_length);
-		if(!buf)
+		path = get_path(env, mess->name, mess->name_length);
+		if(!path)
 			return -1;
 
-		ret = rmdir(buf);
-		free(buf);
+		ret = rmdir(path);
+		free(path);
 
 		return ret;
 
@@ -200,71 +226,54 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		return umask(mess->co_mode);
 
 	case UNLINK:
-		buf = get_path(env, mess->name, mess->name_length);
-		if(!buf)
+		path = get_path(env, mess->name, mess->name_length);
+		if(!path)
 			return -1;
 
-		ret = unlink(buf);
-		free(buf);
+		ret = unlink(path);
+		free(path);
 
 		return ret;
 	
 	case LSEEK:
-		return lseek(mess->ls_fd, mess->offset, mess->whence);
+		array_get(&env->file_handlers, mess->ls_fd, &file_handler);
+		return lseek(file_handler.file_d, mess->offset, mess->whence);
 
 	case ACCESS:
-		buf = get_path(env, mess->name, mess->name_length);
-		if(!buf)
+		path = get_path(env, mess->name, mess->name_length);
+		if(!path)
 			return -1;
-		ret = access(buf, mess->m3_i2);
-		free(buf);
+		ret = access(path, mess->m3_i2);
+		free(path);
 
 		return ret;
 
 	case STAT:
-		buf = get_path(env, mess->buffer, mess->name1_length);
-		if(!buf)
+		path = get_path(env, mess->buffer, mess->name1_length);
+		if(!path)
 			return -1;
 
-		ret = stat(buf, &statbuf);
-		free(buf);
+		ret = get_stat_from_path(path, &file_handler.statbuf);
+		free(path);
 
-		fs_statbuf.s_dev   = statbuf.st_dev;
-		fs_statbuf.s_ino   = statbuf.st_ino;
-		fs_statbuf.s_mode  = statbuf.st_mode;
-		fs_statbuf.s_nlink = statbuf.st_nlink;
-		fs_statbuf.s_uid   = statbuf.st_uid;
-		fs_statbuf.s_gid   = statbuf.st_gid;
-		fs_statbuf.s_rdev  = statbuf.st_rdev;
-		fs_statbuf.s_size  = statbuf.st_size;
-		fs_statbuf.s_atime = statbuf.st_atim.tv_sec;
-		fs_statbuf.s_mtime = statbuf.st_mtim.tv_sec;
-		fs_statbuf.s_ctime = statbuf.st_ctim.tv_sec;
-
-		for(i = 0; i < (int) sizeof(struct fs_stat); i ++)
-			env->write_byte(env, mess->m1_p2+i, ((uint8_t*)&fs_statbuf)[i]);
-
-		return 0;
-
-	case FSTAT:
-		ret = fstat(mess->fd, &statbuf);
-
-		fs_statbuf.s_dev   = statbuf.st_dev;
-		fs_statbuf.s_ino   = statbuf.st_ino;
-		fs_statbuf.s_mode  = statbuf.st_mode;
-		fs_statbuf.s_nlink = statbuf.st_nlink;
-		fs_statbuf.s_uid   = statbuf.st_uid;
-		fs_statbuf.s_gid   = statbuf.st_gid;
-		fs_statbuf.s_rdev  = statbuf.st_rdev;
-		fs_statbuf.s_size  = statbuf.st_size;
-		fs_statbuf.s_atime = statbuf.st_atim.tv_sec;
-		fs_statbuf.s_mtime = statbuf.st_mtim.tv_sec;
-		fs_statbuf.s_ctime = statbuf.st_ctim.tv_sec;
-
-		for(i = 0; i < (int) sizeof(struct fs_stat); i ++)
-			env->write_byte(env, mess->m1_p1+i, ((uint8_t*)&fs_statbuf)[i]);
+		if(!ret) {
+			for(i = 0; i < (int) sizeof(struct fs_stat); i ++)
+				env->write_byte(env, mess->m1_p2+i, ((uint8_t*)&file_handler.statbuf)[i]);
+		}
 
 		return ret;
+
+	case FSTAT:
+		array_get(&env->file_handlers, mess->fd, &file_handler);
+		if(!file_handler.has_stat)
+			return -1;
+
+		for(i = 0; i < (int) sizeof(struct fs_stat); i ++) {
+			env->write_byte(env, mess->m1_p1+i,
+				((uint8_t*)&file_handler.statbuf)[i]);
+		}
+
+		return 0;
 
 	default:
 		FS_ERROR_LOG("Unknown message type : %d\n", mess->m_type);

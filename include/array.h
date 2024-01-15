@@ -18,5 +18,6 @@ void array_push(Array*, void*);
 size_t array_size(Array*);
 void array_set_size(Array*, size_t);
 void array_clear(Array*);
+void array_get(Array*, int, void*);
 
 #endif

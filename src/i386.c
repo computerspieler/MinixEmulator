@@ -331,7 +331,7 @@ void x86_init_stack(Emulator_Env *env, int argc, char* argv[])
 		args_start[i] = array_size(&env->stack) - 1;
 	}
 
-	// Push envp (TODO)
+	// FIXME: Push envp
 	for(j = 0; j < 4; j ++) {
 		c = (0 >> (8*(3-j))) & 0xFF;
 		array_push(&env->stack, &c);

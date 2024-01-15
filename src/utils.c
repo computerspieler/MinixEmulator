@@ -1,6 +1,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <sys/stat.h>
+#include <assert.h>
+#include <unistd.h>
 
 #include "type.h"
 #include "macros.h"
@@ -31,6 +34,9 @@ char *get_path(Emulator_Env *env, uint32_t path_ptr, int length)
 	for(i = 0; i < length; i ++) 
 		buf[i+off] = env->read_byte(env, path_ptr+i);
 
+#ifdef DEBUG
+	DEBUG_LOG("Path: %s\n", buf);
+#endif
 
 	return buf;
 }
@@ -123,19 +129,99 @@ int read_executable(Emulator_Env *env, FILE *fp)
 	return 0;
 }
 
+int get_stat_from_path(char *path, struct fs_stat *out_statbuf)
+{
+	struct stat statbuf;
+
+	assert(path);
+	assert(out_statbuf);
+
+	if(stat(path, &statbuf)) {
+		perror("stat");
+		return 1;
+	}
+
+	out_statbuf->s_dev   = statbuf.st_dev;
+	out_statbuf->s_ino   = statbuf.st_ino;
+	out_statbuf->s_mode  = statbuf.st_mode;
+	out_statbuf->s_nlink = statbuf.st_nlink;
+	out_statbuf->s_uid   = statbuf.st_uid;
+	out_statbuf->s_gid   = statbuf.st_gid;
+	out_statbuf->s_rdev  = statbuf.st_rdev;
+	out_statbuf->s_size  = statbuf.st_size;
+	out_statbuf->s_atime = statbuf.st_atim.tv_sec;
+	out_statbuf->s_mtime = statbuf.st_mtim.tv_sec;
+	out_statbuf->s_ctime = statbuf.st_ctim.tv_sec;
+
+	return 0;
+}
+
+int get_stat(int fd, struct fs_stat *ret)
+{
+	struct stat statbuf;
+
+	assert(fd >= 0);
+
+	if(fstat(fd, &statbuf))
+		return 0;
+
+	ret->s_dev   = statbuf.st_dev;
+	ret->s_ino   = statbuf.st_ino;
+	ret->s_mode  = statbuf.st_mode;
+	ret->s_nlink = statbuf.st_nlink;
+	ret->s_uid   = statbuf.st_uid;
+	ret->s_gid   = statbuf.st_gid;
+	ret->s_rdev  = statbuf.st_rdev;
+	ret->s_size  = statbuf.st_size;
+	ret->s_atime = statbuf.st_atim.tv_sec;
+	ret->s_mtime = statbuf.st_mtim.tv_sec;
+	ret->s_ctime = statbuf.st_ctim.tv_sec;
+
+	return 1;
+}
+
 int build_env(Emulator_Env *env)
 {
+	FileHandler tmp_handler;
+
 	bzero(env, sizeof(Emulator_Env));
 	
 	env->stack = array_create(sizeof(char));
 	env->heap = array_create(sizeof(char));
 	env->symbols = array_create(sizeof(struct nlist));
+	env->file_handlers = array_create(sizeof(FileHandler));
+
+	tmp_handler.dir_p = NULL;
+	// Add the default streams
+	tmp_handler.file_d = STDIN_FILENO;
+	tmp_handler.has_stat = get_stat(STDIN_FILENO, &tmp_handler.statbuf);
+	array_set(&env->file_handlers, 0, &tmp_handler);
+	
+	tmp_handler.file_d = STDOUT_FILENO;
+	tmp_handler.has_stat = get_stat(STDOUT_FILENO, &tmp_handler.statbuf);
+	array_set(&env->file_handlers, 1, &tmp_handler);
+	
+	tmp_handler.file_d = STDERR_FILENO;
+	tmp_handler.has_stat = get_stat(STDERR_FILENO, &tmp_handler.statbuf);
+	array_set(&env->file_handlers, 2, &tmp_handler);
 	
 	return 0;
 }
 
 void destroy_env(Emulator_Env *env)
 {
+	int i;
+	FileHandler* fh;
+
+	fh = env->file_handlers.array;
+	for(i = 0; i < (int) array_size(&env->file_handlers); i ++) {
+		if(FS_S_ISDIR(fh[i].statbuf.s_mode))
+			closedir(fh[i].dir_p);
+		else
+			close(fh[i].file_d);
+	}
+
+	array_free(&env->file_handlers);
 	array_free(&env->stack);
 	array_free(&env->heap);
 	array_free(&env->symbols);
