@@ -216,7 +216,7 @@ void destroy_env(Emulator_Env *env)
 
 	fh = env->file_handlers.array;
 	for(i = 0; i < (int) array_size(&env->file_handlers); i ++) {
-		if(FS_S_ISDIR(fh[i].statbuf.s_mode))
+		if(fh[i].dir_p)
 			closedir(fh[i].dir_p);
 		else
 			close(fh[i].file_d);

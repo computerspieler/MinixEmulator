@@ -126,9 +126,13 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		array_get(&env->file_handlers, mess->fd, &file_handler);
 		
 		if(file_handler.dir_p)
-			return closedir(file_handler.dir_p);
+			ret = closedir(file_handler.dir_p);
 		else
-			return close(file_handler.file_d);
+			ret = close(file_handler.file_d);
+
+		bzero(&file_handler, sizeof(FileHandler));
+		array_set(&env->file_handlers, mess->fd, &file_handler);
+		return ret;
 
 	case OPEN:
 		flags = 0;
