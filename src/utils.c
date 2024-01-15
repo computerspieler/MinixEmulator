@@ -137,6 +137,7 @@ int get_stat_from_path(char *path, struct fs_stat *out_statbuf)
 	assert(out_statbuf);
 
 	if(stat(path, &statbuf)) {
+		fprintf(stderr, "Error for path %s: ", path);
 		perror("stat");
 		return 1;
 	}

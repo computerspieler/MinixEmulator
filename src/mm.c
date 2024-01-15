@@ -76,6 +76,7 @@ int mm_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		free(buf);
 
 		if(!f) {
+			fprintf(stderr, "Error for path %s: ", buf);
 			perror("fopen");
 			return -1;
 		}

@@ -31,6 +31,7 @@ int main(int argc, char* argv[])
 
 	fp = fopen(argv[2], "r");
 	if(!fp) {
+		fprintf(stderr, "Error for path %s: ", argv[2]);
 		perror("fopen");
 		destroy_env(&env);
 		return -1;
