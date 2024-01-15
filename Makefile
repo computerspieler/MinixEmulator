@@ -1,6 +1,7 @@
 SRCS=$(wildcard src/*.c) $(wildcard libx86emu/*.c)
 DEPS=$(patsubst %,bin/deps/%.d,$(SRCS))
-OBJS=$(patsubst %,bin/objs/%.o,$(SRCS))
+DEBUGOBJS=$(patsubst %,bin/debug/objs/%.o,$(SRCS))
+RELEASEOBJS=$(patsubst %,bin/release/objs/%.o,$(SRCS))
 
 CC=gcc
 LD=gcc
@@ -14,23 +15,25 @@ ifneq ($(MAKECMDGOALS), clean)
 -include $(DEPS)
 endif
 
-release: LDFLAGS:=-O2
-release: CCFLAGS:=$(CCFLAGS) -O2
-release: bin/emulator
-
-debug: LDFLAGS:=-g -ggdb -fsanitize=address
-debug: CCFLAGS:=$(CCFLAGS) -g -ggdb -DDEBUG
-debug: bin/emulator
+release: bin/release/emulator
+debug: bin/debug/emulator
 
 clean:
 	rm -rf bin
 
-bin/emulator: $(OBJS)
-	$(LD) -o $@ $^ $(LDFLAGS)
+bin/debug/emulator: $(DEBUGOBJS)
+	$(LD) -o $@ $^ $(LDFLAGS) -g -ggdb -fsanitize=address
 
-bin/objs/%.c.o: %.c
+bin/debug/objs/%.c.o: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CCFLAGS) -o $@ $<
+	$(CC) $(CCFLAGS) -g -ggdb -DDEBUG -o $@ $<
+
+bin/release/emulator: $(RELEASEOBJS)
+	$(LD) -o $@ $^ $(LDFLAGS) -O2
+
+bin/release/objs/%.c.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CCFLAGS) -O2 -o $@ $<
 
 bin/deps/%.c.d: %.c
 	@mkdir -p $(dir $@)
