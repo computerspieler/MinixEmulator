@@ -7,6 +7,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <sys/times.h>
 
 #include "services.h"
 #include "macros.h"
@@ -30,6 +31,7 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 	FileHandler file_handler;
 	struct dirent *dir_ent;
 	int dir_ent_name_length;
+	struct tms tms_buf;
 
 	FS_DEBUG_LOG("Message type: %s(%d)\n",
 		callnr_to_string[mess->m_type], mess->m_type);
@@ -157,7 +159,13 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		if(mess->mode & FS_O_WRONLY) flags |= O_WRONLY;
 		if(mess->mode & FS_O_RDWR)   flags |= O_RDWR;
 		
-		ret = get_stat_from_path(path, &file_handler.statbuf);
+		if(mess->mode & FS_O_CREAT)
+			printf("Create a new file !\n");
+
+		if(access(path, F_OK) == 0)
+			ret = get_stat_from_path(path, &file_handler.statbuf);
+		else
+			ret = 0;
 
 		if(!ret && FS_S_ISDIR(file_handler.statbuf.s_mode)) {
 			file_handler.dir_p = opendir(path);
@@ -278,6 +286,14 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		}
 
 		return 0;
+
+	case TIMES:
+		ret = times(&tms_buf);
+		mess->m4_l1 = tms_buf.tms_utime;
+		mess->m4_l2 = tms_buf.tms_stime;
+		mess->m4_l3 = tms_buf.tms_cutime;
+		mess->m4_l4 = tms_buf.tms_cstime;
+		return ret;
 
 	default:
 		FS_ERROR_LOG("Unknown message type : %d\n", mess->m_type);
