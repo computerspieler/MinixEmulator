@@ -60,7 +60,9 @@ int mm_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		return 0;
 	
 	case FORK:
-		return fork();
+		ret_pid = fork();
+		MM_DEBUG_LOG("PID: %d\n", ret_pid);
+		return ret_pid;
 	
 	case WAIT:
 		ret_pid = wait(&ret_status);
@@ -73,13 +75,14 @@ int mm_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 			return -1;
 
 		f = fopen(buf, "r");
-		free(buf);
 
 		if(!f) {
 			fprintf(stderr, "Error for path %s: ", buf);
+			free(buf);
 			perror("fopen");
 			return -1;
 		}
+		free(buf);
 
 		build_env(&new_env);
 		if(read_executable(&new_env, f)) {
