@@ -37,5 +37,6 @@ bin/release/objs/%.c.o: %.c
 
 bin/deps/%.c.d: %.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CCFLAGS) -M -o $@ $< -MT $(patsubst bin/deps/%.d,bin/objs/%.o,$@)
+	$(CC) $(CCFLAGS) -M $< -MT $(patsubst bin/deps/%.d,bin/debug/objs/%.o,$@) > $@
+	$(CC) $(CCFLAGS) -M $< -MT $(patsubst bin/deps/%.d,bin/release/objs/%.o,$@) >> $@
 
