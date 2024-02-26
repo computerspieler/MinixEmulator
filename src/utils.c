@@ -255,12 +255,12 @@ int run_executable(Emulator_Env *env)
 	return -1;
 }
 
-void add_arguments_env(Emulator_Env *env, int argc, char* argv[])
+void add_arguments_env(Emulator_Env *env, int argc, char* argv[], int envc, char* envp[])
 {
 	switch(env->hdr.a_cpu) {
 	case A_I80386:
 		DEBUG_LOG("CPU ID: I386\n");
-		x86_emulator_init(env, argc, argv);
+		x86_emulator_init(env, argc, argv, envc, envp);
 		return;
 	case A_I8086:
 		DEBUG_LOG("Targeted CPU: I86\n");

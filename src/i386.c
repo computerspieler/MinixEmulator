@@ -315,7 +315,15 @@ skip_permissions_check:
 	return 0;
 }
 
-void x86_init_stack(Emulator_Env *env, int argc, char* argv[])
+#define PUSH_DWORD(value)	{ 					\
+		address = value;						\
+		for(j = 0; j < 4; j ++) {				\
+			c = (address >> (8*(3-j))) & 0xFF;	\
+			array_push(&env->stack, &c);		\
+		}										\
+	}
+
+void x86_init_stack(Emulator_Env *env, int argc, char* argv[], int envc, char* envp[])
 {
 	int i, j;
 	cpu_ptr address;
@@ -323,7 +331,9 @@ void x86_init_stack(Emulator_Env *env, int argc, char* argv[])
 	size_t stack_size;
 	size_t arg_size;
 	size_t args_start[argc];
-
+	size_t env_size;
+	size_t env_start[envc];
+	
 	for(i = argc-1; i >= 0; i --) {
 		arg_size = strlen(argv[i]);
 		for(j = arg_size; j >= 0; j --)
@@ -331,30 +341,24 @@ void x86_init_stack(Emulator_Env *env, int argc, char* argv[])
 		args_start[i] = array_size(&env->stack) - 1;
 	}
 
-	// FIXME: Push envp
-	for(j = 0; j < 4; j ++) {
-		c = (0 >> (8*(3-j))) & 0xFF;
-		array_push(&env->stack, &c);
+	for(i = envc-1; i >= 0; i --) {
+		env_size = strlen(envp[i]);
+		for(j = env_size; j >= 0; j --)
+			array_push(&env->stack, &envp[i][j]);
+		env_start[i] = array_size(&env->stack) - 1;
 	}
 
-	array_push(&env->stack, NULL);
-	array_push(&env->stack, NULL);
-	array_push(&env->stack, NULL);
-	array_push(&env->stack, NULL);
+	PUSH_DWORD(0);
+	for(i = envc-1; i >= 0; i --) {
+		PUSH_DWORD(~0 - env_start[i] - env->data_start);
+	}
+
+	PUSH_DWORD(0);
 	for(i = argc-1; i >= 0; i --) {
-		address = ~0 - args_start[i] - env->data_start;
-		for(j = 0; j < 4; j ++) {
-			c = (address >> (8*(3-j))) & 0xFF;
-			array_push(&env->stack, &c);
-		}
+		PUSH_DWORD(~0 - args_start[i] - env->data_start);
 	}
 
-	// Push argc
-	for(j = 0; j < 4; j ++) {
-		c = (argc >> (8*(3-j))) & 0xFF;
-		array_push(&env->stack, &c);
-	}
-
+	PUSH_DWORD(argc);
 	env->stack_ptr_start = array_size(&env->stack) - 1;
 	stack_size = env->hdr.a_total - (
 		env->hdr.a_bss +
@@ -366,7 +370,7 @@ void x86_init_stack(Emulator_Env *env, int argc, char* argv[])
 		array_push(&env->stack, NULL);
 }
 
-void x86_emulator_init(Emulator_Env *env, int argc, char* argv[])
+void x86_emulator_init(Emulator_Env *env, int argc, char* argv[], int envc, char* envp[])
 {
 	env->read_byte = read_byte;
 	env->write_byte = write_byte;
@@ -380,7 +384,7 @@ void x86_emulator_init(Emulator_Env *env, int argc, char* argv[])
 	env->bss_start = env->data_start + env->hdr.a_data;
 	env->heap_start = env->bss_start + env->hdr.a_bss;
 
-	x86_init_stack(env, argc, argv);
+	x86_init_stack(env, argc, argv, envc, envp);
 }
 
 int run_x86_emulator(Emulator_Env *env)

@@ -8,6 +8,7 @@
 #include "i386.h"
 #include "array.h"
 #include "utils.h"
+#include "config.h"
 
 void die()
 {
@@ -44,6 +45,7 @@ int main(int argc, char* argv[])
 	}
 	fclose(fp);
 
-	add_arguments_env(&env, argc-2, &argv[2]);
+	// TODO: Make it configurable
+	add_arguments_env(&env, argc-2, &argv[2], sizeof(envp)/sizeof(char*), envp);
 	return run_executable(&env);
 }
