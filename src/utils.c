@@ -280,18 +280,40 @@ void add_arguments_env(Emulator_Env *env, int argc, char* argv[], int envc, char
 	}
 }
 
+
+#ifdef DEBUG
+static FILE *log_file;
+
+int debug_init(char* path)
+{
+	log_file = fopen(path, "w");
+	if(!log_file) {
+		fprintf(stderr, "Error for path %s: ", path);
+		perror("fopen");
+		return 1;
+	}
+
+	return 0;
+}
+
 int debug_print(const char* fmt, ...)
 {
 	int output;
 	va_list list;
 
 	va_start(list, fmt);
-	fprintf(stderr, "[%d]", getpid());
-	output = vfprintf(stderr, fmt, list);
+	fprintf(log_file, "[%d]", getpid());
+	output = vfprintf(log_file, fmt, list);
 	va_end(list);
 	
 	return output;
 }
+
+void debug_close()
+{
+	fclose(log_file);
+}
+#endif
 
 #include "minix_errno.h"
 

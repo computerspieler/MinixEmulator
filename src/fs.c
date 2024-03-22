@@ -50,12 +50,6 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		return 0;
 	
 	case WRITE:
-#ifdef DEBUG
-		// Send everything to stdout, it's
-		// easier to debug
-		if(mess->fd == STDERR_FILENO)
-			mess->fd = STDOUT_FILENO;
-#endif
 		array_get(&env->file_handlers, mess->fd, &file_handler);
 		if(!file_handler.has_stat) {
 			env->error_no = MINIX_EGENERIC;
@@ -277,9 +271,11 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 			return -1;
 		}
 
-		ret = unlink(path);
-		if(ret == -1)
-			env->error_no = convert_errno();
+		ret = 0;
+		
+		//ret = unlink(path);
+		//if(ret == -1)
+		//	env->error_no = convert_errno();
 
 		free(path);
 
