@@ -15,6 +15,7 @@
 #include "fs_stat.h"
 #include "utils.h"
 #include "fs_param.h"
+#include "minix_errno.h"
 
 #define WRITE_IF_POSSIBLE(base_address, index, max_index, data)	\
 	if((index) < (max_index)) {	\
@@ -26,7 +27,7 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 	int i, j;
 	char c;
 	int flags, cmd;
-	int ret;
+	int ret, fs_mode;
 	char *path;
 	FileHandler file_handler;
 	struct dirent *dir_ent;
@@ -56,13 +57,17 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 			mess->fd = STDERR_FILENO;
 #endif
 		array_get(&env->file_handlers, mess->fd, &file_handler);
-		if(!file_handler.has_stat)
+		if(!file_handler.has_stat) {
+			env->error_no = MINIX_EGENERIC;
 			return -1;
+		}
 
 		// We don't support writing to directory
 		// for now
-		if(file_handler.dir_p)
+		if(file_handler.dir_p) {
+			env->error_no = MINIX_EGENERIC;
 			return -1;
+		}
 
 		for(i = 0; i < mess->nbytes; i ++) {
 			c = env->read_byte(env, mess->buffer+i);
@@ -70,7 +75,6 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 				break;
 		}
 		
-		env->response.m_type = 0;
 		env->response.PROC_NR = mess->m_source;
 		return i;
 	
@@ -109,12 +113,18 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 			}
 		} else {
 			for(i = 0; i < mess->nbytes; i ++) {
-				if(!read(file_handler.file_d, &c, sizeof(char)))
+				ret = read(file_handler.file_d, &c, sizeof(char));
+				
+				if(ret < 0) {
+					env->error_no = convert_errno();
 					break;
+				}
+				if(!ret)
+					break;
+
 				env->write_byte(env, mess->buffer+i, c);
 			}
 
-			env->response.m_type = 0;
 			env->response.PROC_NR = mess->m_source;
 		}
 
@@ -122,6 +132,8 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 
 	case TIME:
 		env->response.reply_l1 = (cpu_ptr) time(NULL);
+		if(env->response.reply_l1 == -1)
+			env->error_no = convert_errno();
 		return 0;
 
 	case CLOSE:
@@ -132,51 +144,63 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		else
 			ret = close(file_handler.file_d);
 
+		if(ret)
+			env->error_no = convert_errno();
+
 		bzero(&file_handler, sizeof(FileHandler));
 		array_set(&env->file_handlers, mess->fd, &file_handler);
 		return ret;
 
 	case OPEN:
 		flags = 0;
-
-		if(mess->mode & FS_O_CREAT)
-			path = get_path(env, mess->buffer, mess->name1_length);
-		else
+		fs_mode = mess->mode;
+		if(!(fs_mode & FS_O_CREAT)) {
+			fs_mode = mess->m3_i2;
 			path = get_path(env, mess->name, mess->name_length);
+		} else
+			path = get_path(env, mess->buffer, mess->name1_length);
 
-		if(!path)
+		if(!path) {
+			env->error_no = MINIX_EINVAL;
 			return -1;
+		}
 
-		if(mess->mode & FS_O_EXCL) flags |= O_EXCL;
-		if(mess->mode & FS_O_CREAT) flags |= O_CREAT;
-		if(mess->mode & FS_O_TRUNC) flags |= O_TRUNC;
-		if(mess->mode & FS_O_NOCTTY) flags |= O_NOCTTY;
+		if((fs_mode & FS_O_ACCMODE) == FS_O_RDONLY) flags = O_RDONLY;
+		if((fs_mode & FS_O_ACCMODE) == FS_O_WRONLY) flags = O_WRONLY;
+		if((fs_mode & FS_O_ACCMODE) == FS_O_RDWR)   flags = O_RDWR;
 
-		if(mess->mode & FS_O_APPEND) flags |= O_APPEND;
-		if(mess->mode & FS_O_NONBLOCK) flags |= O_NONBLOCK;
+		if(fs_mode & FS_O_EXCL) flags |= O_EXCL;
+		if(fs_mode & FS_O_CREAT) flags |= O_CREAT;
+		if(fs_mode & FS_O_TRUNC) flags |= O_TRUNC;
+		if(fs_mode & FS_O_NOCTTY) flags |= O_NOCTTY;
 
-		if(mess->mode & FS_O_RDONLY) flags |= O_RDONLY;
-		if(mess->mode & FS_O_WRONLY) flags |= O_WRONLY;
-		if(mess->mode & FS_O_RDWR)   flags |= O_RDWR;
-
+		if(fs_mode & FS_O_APPEND) flags |= O_APPEND;
+		if(fs_mode & FS_O_NONBLOCK) flags |= O_NONBLOCK;
+		
 		if(access(path, F_OK) == 0)
-			ret = get_stat_from_path(path, &file_handler.statbuf);
+			ret = !get_stat_from_path(path, &file_handler.statbuf);
 		else
 			ret = 0;
 
 		if(!ret && FS_S_ISDIR(file_handler.statbuf.s_mode)) {
 			file_handler.dir_p = opendir(path);
+			if(!file_handler.dir_p){
+				env->error_no = convert_errno();
+				free(path);
+				return -1;
+			}
 			file_handler.file_d = -1;
 			file_handler.has_stat = 1;
 			free(path);
-			if(!file_handler.dir_p)
-				return -1;
 		} else {
 			file_handler.file_d = open(path, flags);
+			if(file_handler.file_d < 0) {
+				env->error_no = convert_errno();
+				free(path);
+				return -1;
+			}
 			file_handler.dir_p = NULL;
 			free(path);
-			if(file_handler.dir_p)
-				return -1;
 			
 			if(!ret)
 				file_handler.has_stat =
@@ -206,27 +230,39 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 
 		// FIXME: Don't ignore fcntl
 		// for directories
-		if(file_handler.file_d >= 0)
-			return fcntl(file_handler.file_d, cmd);
+		if(file_handler.file_d >= 0) {
+			ret = fcntl(file_handler.file_d, cmd);
+			if(ret == -1)
+				env->error_no = convert_errno();
+			return ret;
+		}
 		else
 			return 0;
 
 	case MKDIR:
 		path = get_path(env, mess->buffer, mess->name1_length);
-		if(!path)
+		if(!path) {
+			env->error_no = MINIX_EINVAL;
 			return -1;
+		}
 
 		ret = mkdir(path, mess->mode);
+		if(ret == -1)
+			env->error_no = convert_errno();
 		free(path);
 
 		return ret;
 
 	case RMDIR:
 		path = get_path(env, mess->name, mess->name_length);
-		if(!path)
+		if(!path) {
+			env->error_no = MINIX_EINVAL;
 			return -1;
+		}
 
 		ret = rmdir(path);
+		if(ret == -1)
+			env->error_no = convert_errno();
 		free(path);
 
 		return ret;
@@ -236,33 +272,53 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 
 	case UNLINK:
 		path = get_path(env, mess->name, mess->name_length);
-		if(!path)
+		if(!path) {
+			env->error_no = MINIX_EINVAL;
 			return -1;
+		}
 
-		ret = unlink(path);
+		//ret = unlink(path);
+		//if(ret == -1)
+		//	env->error_no = convert_errno();
+
 		free(path);
 
 		return ret;
 	
 	case LSEEK:
 		array_get(&env->file_handlers, mess->ls_fd, &file_handler);
-		return lseek(file_handler.file_d, mess->offset, mess->whence);
+		ret = lseek(file_handler.file_d, mess->offset, mess->whence);
+
+		if(ret == -1)
+			env->error_no = convert_errno();
+
+		return ret;
 
 	case ACCESS:
 		path = get_path(env, mess->name, mess->name_length);
-		if(!path)
+		if(!path) {
+			env->error_no = MINIX_EINVAL;
 			return -1;
+		}
+
 		ret = access(path, mess->m3_i2);
+		if(ret == -1)
+			env->error_no = convert_errno();
 		free(path);
 
 		return ret;
 
 	case STAT:
 		path = get_path(env, mess->buffer, mess->name1_length);
-		if(!path)
+		if(!path) {
+			env->error_no = MINIX_EINVAL;
 			return -1;
+		}
 
 		ret = get_stat_from_path(path, &file_handler.statbuf);
+		if(ret)
+			env->error_no = convert_errno();
+
 		free(path);
 
 		if(!ret) {
@@ -274,8 +330,10 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 
 	case FSTAT:
 		array_get(&env->file_handlers, mess->fd, &file_handler);
-		if(!file_handler.has_stat)
+		if(!file_handler.has_stat) {
+			env->error_no = MINIX_EINVAL;
 			return -1;
+		}
 
 		for(i = 0; i < (int) sizeof(struct fs_stat); i ++) {
 			env->write_byte(env, mess->m1_p1+i,

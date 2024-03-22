@@ -14,5 +14,6 @@ int run_executable(Emulator_Env *env);
 int get_stat_from_path(char *path, struct fs_stat *out_statbuf);
 int get_stat(int fd, struct fs_stat *ret);
 int debug_print(const char* fmt, ...);
+int convert_errno();
 
 #endif /* _UTILS_H_ */

@@ -81,6 +81,7 @@ int mm_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 			fprintf(stderr, "Error for path %s: ", buf);
 			free(buf);
 			perror("fopen");
+			env->error_no = convert_errno();
 			return -1;
 		}
 		free(buf);
@@ -88,6 +89,7 @@ int mm_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		build_env(&new_env);
 		if(read_executable(&new_env, f)) {
 			fclose(f);
+			env->error_no = convert_errno();
 			destroy_env(&new_env);
 			return -1;
 		}

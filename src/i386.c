@@ -51,13 +51,8 @@ int intr_handler(x86emu_t *emu, u8 num, unsigned type)
 //	DEBUG_LOG("Pointer: %8x\n", message_ptr);
 
 	emu->x86.R_EAX = interpret_message(env, emu->x86.R_EAX, &mess, direction);
-	if(emu->x86.R_EAX)
-		env->response.m_type = -1;
-	else {
-		env->response.m_type = 0;
-		if(env->stop)
-			x86emu_stop(emu);
-	}
+	if(env->stop)
+		x86emu_stop(emu);
 
 	if(direction == RECEIVE || direction == BOTH) {
 		for(i = 0; i < sizeof(message); i ++) {

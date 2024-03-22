@@ -6,11 +6,10 @@
 #include "macros.h"
 #include "fs.h"
 #include "mm.h"
+#include "minix_errno.h"
 
 int interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, int direction)
 {
-	int ret;
-
 	assert(env);
 	assert(mess);
 
@@ -18,24 +17,21 @@ int interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, int d
 	//	mess->m_source, dest_src, mess->m_type, direction);
 
 	env->response = *mess;
+	env->error_no = MINIX_EOK;
 	switch(dest_src) {
 	case MM:
-		ret = mm_interpret_message(env, dest_src, mess, direction);
+		env->response.m_type = mm_interpret_message(env, dest_src, mess, direction);
 		break;
 	case FS:
-		ret = fs_interpret_message(env, dest_src, mess, direction);
+		env->response.m_type = fs_interpret_message(env, dest_src, mess, direction);
 		break;
 	default:
 		ERROR_LOG("Unknown destination: %d\n", dest_src);
-		return -1;
+		return 1;
 	}
 	
-	// Not sure if that's correct
-	// Maybe the value between the host's errno
-	// and Minix's errno could be different
-	// TODO: Change it in fs & mm
-	env->error_no = errno;
-	env->response.m_type = env->error_no;
+	if(env->error_no != MINIX_EOK)
+		env->response.m_type = -env->error_no;
 	
-	return ret;
+	return 0;
 }
