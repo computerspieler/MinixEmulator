@@ -2,13 +2,15 @@
 #define _MACROS_H_
 
 #include <stdio.h>
+#include <stdarg.h>
 
 #include "callnr.h"
 #include "com.h"
 #include "const.h"
+#include "utils.h"
 
 #ifdef DEBUG
-#define DEBUG_LOG(...)	fprintf(stdout, __VA_ARGS__)
+#define DEBUG_LOG(...)	debug_print(__VA_ARGS__)
 #else
 #define DEBUG_LOG(...)
 #endif

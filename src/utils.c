@@ -279,3 +279,16 @@ void add_arguments_env(Emulator_Env *env, int argc, char* argv[], int envc, char
 		return;
 	}
 }
+
+int debug_print(const char* fmt, ...)
+{
+	int output;
+	va_list list;
+
+	va_start(list, fmt);
+	fprintf(stdout, "[%d]", getpid());
+	output = vfprintf(stdout, fmt, list);
+	va_end(list);
+	
+	return output;
+}
