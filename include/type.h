@@ -131,6 +131,7 @@ typedef struct Emulator_Env Emulator_Env;
 struct Emulator_Env {
 	int stop;
 	int exit_status;
+	int error_no;
 
 	message response;
 	struct exec hdr;

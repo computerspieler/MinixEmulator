@@ -158,9 +158,6 @@ int fs_interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, in
 		if(mess->mode & FS_O_RDONLY) flags |= O_RDONLY;
 		if(mess->mode & FS_O_WRONLY) flags |= O_WRONLY;
 		if(mess->mode & FS_O_RDWR)   flags |= O_RDWR;
-		
-		if(mess->mode & FS_O_CREAT)
-			printf("Create a new file !\n");
 
 		if(access(path, F_OK) == 0)
 			ret = get_stat_from_path(path, &file_handler.statbuf);

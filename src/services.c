@@ -29,9 +29,13 @@ int interpret_message(Emulator_Env *env, uint32_t dest_src, message *mess, int d
 		ERROR_LOG("Unknown destination: %d\n", dest_src);
 		return -1;
 	}
+	
 	// Not sure if that's correct
 	// Maybe the value between the host's errno
 	// and Minix's errno could be different
-	env->response.m_type = errno;
+	// TODO: Change it in fs & mm
+	env->error_no = errno;
+	env->response.m_type = env->error_no;
+	
 	return ret;
 }
