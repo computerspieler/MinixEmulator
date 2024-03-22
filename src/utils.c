@@ -286,8 +286,8 @@ int debug_print(const char* fmt, ...)
 	va_list list;
 
 	va_start(list, fmt);
-	fprintf(stdout, "[%d]", getpid());
-	output = vfprintf(stdout, fmt, list);
+	fprintf(stderr, "[%d]", getpid());
+	output = vfprintf(stderr, fmt, list);
 	va_end(list);
 	
 	return output;
